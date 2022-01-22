@@ -1,0 +1,39 @@
+.piano {
+  display: flex;
+  height: 50vh;
+}
+
+.blackKey,
+.whiteKey {
+  box-shadow: -1px 1px 2px slategray;
+  font-size: small;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+}
+
+.blackKey {
+  --width: 30px;
+
+  background-color: black;
+  color: ghostwhite;
+
+  height: 60%;
+  width: var(--width);
+
+  left: calc(var(--width) / 2);
+
+  padding-bottom: 0.1em;
+}
+
+.whiteKey {
+  --width: 60px;
+
+  background-color: ghostwhite;
+  color: black;
+
+  height: 100%;
+  width: var(--width);
+
+  padding-bottom: 1em;
+}
