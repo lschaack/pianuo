@@ -1,4 +1,5 @@
 import React, { FC, KeyboardEvent, useEffect, useState } from "react";
+import cx from 'clsx';
 
 import styles from './styles.module.scss';
 
@@ -68,11 +69,22 @@ const KEY_TO_FREQUENCY: Record<Key, number> = Object.fromEntries(
 const isBlackKey = (key: Key) => [ '#', 'b' ].includes(key[1]);
 
 const Key: FC<{ pianoKey: Key, piano: Piano, debug?: boolean }> = ({ pianoKey, piano, debug = false }) => {
+  const [ isDown, setIsDown ] = useState(false);
+
   return (
     <div
-      onMouseDown={() => piano.press(pianoKey)}
-      onMouseUp={() => piano.release(pianoKey)}
-      className={isBlackKey(pianoKey) ? styles.blackKey : styles.whiteKey}
+      onMouseDown={() => {
+        piano.press(pianoKey);
+        setIsDown(true);
+      }}
+      onMouseUp={() => {
+        piano.release(pianoKey)
+        setIsDown(false);
+      }}
+      className={cx(
+        isBlackKey(pianoKey) ? styles.blackKey : styles.whiteKey,
+        isDown && styles.pressed
+      )}
     >
       {debug ? pianoKey : null}
     </div>
@@ -80,6 +92,14 @@ const Key: FC<{ pianoKey: Key, piano: Piano, debug?: boolean }> = ({ pianoKey, p
 }
 
 // ############################################################
+
+type EnvelopeOptions = {
+  attack: number;
+  hold: number;
+  decay: number;
+  sustain: number;
+  release: number;
+}
 
 class Envelope {
   context: AudioContext;
@@ -91,8 +111,12 @@ class Envelope {
   sustain: number;
   release: number;
 
-  constructor(context: AudioContext, attack = 0.03, hold = 0.01, decay = 0.1, sustain = 0.3, release = 0.1) {
+  constructor(context: AudioContext, options?: Partial<EnvelopeOptions>) {
     this.context = context;
+
+    const { attack, hold, decay, sustain, release } = {
+      attack: 0.03, hold: 0.01, decay: 0.1, sustain: 0.3, release: 0.4, ...options
+    };
 
     this.attack = attack;
     this.hold = hold;
@@ -112,7 +136,7 @@ class Envelope {
       this.param.exponentialRampToValueAtTime(1, startTime + this.attack);
       this.param.linearRampToValueAtTime(1, startTime + this.attack + this.hold);
       // TODO: exponential ramp
-      this.param.linearRampToValueAtTime(
+      this.param.exponentialRampToValueAtTime(
         this.sustain,
         startTime + this.attack + this.hold + this.decay
       );
@@ -129,24 +153,37 @@ class Envelope {
 
 type Voice = {
   oscillator: OscillatorNode;
+  interval: OscillatorNode;
   gain: GainNode;
   envelope: Envelope;
 }
 
 class Piano {
   static N_VOICES = 5;
-  static GAIN = 0.5;
+  static GAIN = 0.3;
 
   context: AudioContext;
+  reverb: ConvolverNode;
   outputGain: GainNode;
   voices: Partial<Record<Key, Voice>> = {};
 
   constructor(context: AudioContext) {
     this.context = context;
+    this.reverb = context.createConvolver();
     this.outputGain = this.context.createGain();
-    this.outputGain.connect(context.destination);
-
     this.outputGain.gain.setValueAtTime(Piano.GAIN, context.currentTime);
+
+    // this will turn on at a random point if the user stars playing before it's loaded
+    // but that's a tomorrow problem
+    fetch('/IMreverbs/Nice Drum Room.wav')
+      .then(response => response.arrayBuffer())
+      .then(buffer => this.context.decodeAudioData(buffer))
+      .then(audioBuffer => this.reverb.buffer = audioBuffer);
+
+    this.outputGain.connect(this.reverb);
+    // TODO: this should probably go before outputGain
+    this.reverb.connect(context.destination);
+    // this.outputGain.connect(context.destination);
   }
 
   press(key: Key) {
@@ -157,21 +194,51 @@ class Piano {
 
       const voice = {
         oscillator: this.context.createOscillator(),
+        interval: this.context.createOscillator(),
         gain: this.context.createGain(),
-        envelope: new Envelope(this.context),
+        envelope: new Envelope(this.context, {
+          attack: 0.03,
+          hold: 0.01,
+          decay: 0.1,
+          sustain: 0.05,
+          release: 0.4
+        }),
       }
 
       this.voices[key]?.gain.disconnect();
-
-      voice.oscillator.connect(voice.gain);
-      voice.oscillator.frequency.setValueAtTime(KEY_TO_FREQUENCY[key], now);
+      const baseFrequency = KEY_TO_FREQUENCY[key];
+      
+      voice.oscillator.type = 'sine';
+      voice.interval.type = 'triangle';
+      
+      voice.oscillator.frequency.setValueAtTime(baseFrequency, now);
       voice.oscillator.start(now);
+      
+      // Play this oscillator a perfect fourth above the base wave
+      // voice.interval.frequency.setValueAtTime(baseFrequency * SEMITONE_WIDTH ** 5, now);
+      voice.interval.frequency.setValueAtTime(baseFrequency, now);
+      voice.interval.start(now);
+      
+      // Vibrato
+      const vibrato = this.context.createOscillator();
+      const vibratoGain = this.context.createGain();
+      vibrato.frequency.setValueAtTime(5, now);
+      vibrato.start();
+      vibratoGain.gain.setValueAtTime(6.5, now);
+      vibrato.connect(vibratoGain);
+      vibratoGain.connect(voice.oscillator.frequency);
+
+      // Envelope frequency modulation
+      voice.oscillator.detune.setValueAtTime(7, now);
+      
+      // Hooking everything up
+      voice.oscillator.connect(voice.gain);
+      voice.interval.connect(voice.gain);
 
       voice.gain.connect(this.outputGain);
 
       voice.envelope.connect(voice.gain.gain);
       voice.envelope.start(now);
-
 
       this.voices[key] = voice;
     }
@@ -197,32 +264,32 @@ class Piano {
 // ############################################################
 
 const keyToNote: Record<string, Key> = {
-  'x': 'C-3',
-  'X': 'C-3',
-  'd': 'C#3',
-  'D': 'C#3',
-  'C': 'D-3',
-  'c': 'D-3',
-  'v': 'E-3',
-  'V': 'E-3',
-  'f': 'D#3',
-  'F': 'D#3',
-  'b': 'F-3',
-  'B': 'F-3',
-  'h': 'F#3',
-  'H': 'F#3',
-  'n': 'G-3',
-  'N': 'G-3',
-  'j': 'G#3',
-  'J': 'G#3',
-  'm': 'A-3',
-  'M': 'A-3',
-  'k': 'A#3',
-  'K': 'A#3',
-  ',': 'B-3',
-  '<': 'B-3',
-  '.': 'C-4',
-  '>': 'C-4',
+  'x': 'C-4',
+  'X': 'C-4',
+  'd': 'C#4',
+  'D': 'C#4',
+  'C': 'D-4',
+  'c': 'D-4',
+  'v': 'E-4',
+  'V': 'E-4',
+  'f': 'D#4',
+  'F': 'D#4',
+  'b': 'F-4',
+  'B': 'F-4',
+  'h': 'F#4',
+  'H': 'F#4',
+  'n': 'G-4',
+  'N': 'G-4',
+  'j': 'G#4',
+  'J': 'G#4',
+  'm': 'A-4',
+  'M': 'A-4',
+  'k': 'A#4',
+  'K': 'A#4',
+  ',': 'B-4',
+  '<': 'B-4',
+  '.': 'C-5',
+  '>': 'C-5',
 }
 
 const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>, piano: Piano | undefined) => {
@@ -238,19 +305,19 @@ const handleKeyUp = (e: KeyboardEvent<HTMLDivElement>, piano: Piano | undefined)
 }
 
 const PLAYABLE_KEYS: Key[] = [
-  'C-3',
-  'C#3',
-  'D-3',
-  'D#3',
-  'E-3',
-  'F-3',
-  'F#3',
-  'G-3',
-  'G#3',
-  'A-3',
-  'A#3',
-  'B-3',
   'C-4',
+  'C#4',
+  'D-4',
+  'D#4',
+  'E-4',
+  'F-4',
+  'F#4',
+  'G-4',
+  'G#4',
+  'A-4',
+  'A#4',
+  'B-4',
+  'C-5',
 ];
 
 export const Pianuo: FC = () => {
