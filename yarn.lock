@@ -1956,11 +1956,6 @@ normalize-path@^3.0.0, normalize-path@~3.0.0:
   resolved "https://registry.yarnpkg.com/normalize-path/-/normalize-path-3.0.0.tgz#0dcd69ff23a1c9b11fd0978316644a0388216a65"
   integrity sha512-6eZs5Ls3WtCisHWp9S2GUy8dqkpGi4BVSz3GaqiE6ezub0512ESztXUwUB6C6IKbQkY2Pnb/mD4WYojCRwcwLA==
 
-note-frequency-map@^0.0.7:
-  version "0.0.7"
-  resolved "https://registry.yarnpkg.com/note-frequency-map/-/note-frequency-map-0.0.7.tgz#7594ff6501151d7f2a340eecd0e4912367864aa4"
-  integrity sha512-aWoN2Ztm4zcksEKGcUSRvPfOGDng/R8MQxYkRtP2bZEq2fUI6xMLnzA2XpHY+vfcsRdvm3ILOXsl/I4eMKLfzg==
-
 object-assign@^4, object-assign@^4.1.1:
   version "4.1.1"
   resolved "https://registry.yarnpkg.com/object-assign/-/object-assign-4.1.1.tgz#2109adc7965887cfc05cbbd442cac8bfbb360863"
