@@ -160,19 +160,27 @@ type Voice = {
 
 class Piano {
   static N_VOICES = 5;
-  static GAIN = 0.3;
+  static GAIN = 0.5;
 
   context: AudioContext;
   reverb: ConvolverNode;
+  eq: BiquadFilterNode;
   outputGain: GainNode;
   voices: Partial<Record<Key, Voice>> = {};
 
   constructor(context: AudioContext) {
     this.context = context;
-    this.reverb = context.createConvolver();
-    this.outputGain = this.context.createGain();
-    this.outputGain.gain.setValueAtTime(Piano.GAIN, context.currentTime);
 
+    this.reverb = this.context.createConvolver();
+
+    this.outputGain = this.context.createGain();
+    this.outputGain.gain.setValueAtTime(Piano.GAIN, this.context.currentTime);
+
+    // TODO: per-voice eq w/envelope
+    this.eq = this.context.createBiquadFilter();
+    this.eq.type = 'lowpass';
+    this.eq.frequency.setValueAtTime(10000, context.currentTime);
+    
     // this will turn on at a random point if the user stars playing before it's loaded
     // but that's a tomorrow problem
     fetch('/IMreverbs/Nice Drum Room.wav')
@@ -180,10 +188,13 @@ class Piano {
       .then(buffer => this.context.decodeAudioData(buffer))
       .then(audioBuffer => this.reverb.buffer = audioBuffer);
 
-    this.outputGain.connect(this.reverb);
-    // TODO: this should probably go before outputGain
-    this.reverb.connect(context.destination);
-    // this.outputGain.connect(context.destination);
+    // hooking everything up
+    // TODO: outputGain should probably be the last node
+    // this.outputGain.connect(this.eq);
+    // this.eq.connect(this.reverb);
+    // this.reverb.connect(context.destination);
+
+    this.outputGain.connect(context.destination);
   }
 
   press(key: Key) {
@@ -198,8 +209,8 @@ class Piano {
         gain: this.context.createGain(),
         envelope: new Envelope(this.context, {
           attack: 0.03,
-          hold: 0.01,
-          decay: 0.1,
+          hold: 0.05,
+          decay: 0.3,
           sustain: 0.05,
           release: 0.4
         }),
@@ -207,16 +218,16 @@ class Piano {
 
       this.voices[key]?.gain.disconnect();
       const baseFrequency = KEY_TO_FREQUENCY[key];
-      
+
       voice.oscillator.type = 'sine';
-      voice.interval.type = 'triangle';
-      
+      voice.interval.type = 'sine';
+
       voice.oscillator.frequency.setValueAtTime(baseFrequency, now);
       voice.oscillator.start(now);
-      
-      // Play this oscillator a perfect fourth above the base wave
-      // voice.interval.frequency.setValueAtTime(baseFrequency * SEMITONE_WIDTH ** 5, now);
-      voice.interval.frequency.setValueAtTime(baseFrequency, now);
+
+      // Play this oscillator an octave above the base wave
+      voice.interval.frequency.setValueAtTime(baseFrequency * SEMITONE_WIDTH ** 12, now);
+      // voice.interval.frequency.setValueAtTime(baseFrequency, now);
       voice.interval.start(now);
       
       // Vibrato
@@ -228,13 +239,19 @@ class Piano {
       vibrato.connect(vibratoGain);
       vibratoGain.connect(voice.oscillator.frequency);
 
-      // Envelope frequency modulation
+      // Detune
       voice.oscillator.detune.setValueAtTime(7, now);
-      
+
+      // Adjust relative volume
+      const oscillatorGain = this.context.createGain();
+      const intervalGain = this.context.createGain();
+
+      oscillatorGain.gain.setValueAtTime(0.5, now);
+      intervalGain.gain.setValueAtTime(0.5, now);
+
       // Hooking everything up
       voice.oscillator.connect(voice.gain);
       voice.interval.connect(voice.gain);
-
       voice.gain.connect(this.outputGain);
 
       voice.envelope.connect(voice.gain.gain);
@@ -264,6 +281,8 @@ class Piano {
 // ############################################################
 
 const keyToNote: Record<string, Key> = {
+  'z': 'B-3',
+  'Z': 'B-3',
   'x': 'C-4',
   'X': 'C-4',
   'd': 'C#4',
@@ -342,7 +361,7 @@ export const Pianuo: FC = () => {
       onKeyUp={e => handleKeyUp(e, piano)}
       tabIndex={0}
     >
-      {piano ? PLAYABLE_KEYS.map(key => <Key key={key} pianoKey={key} piano={piano} debug />) : null}
+      {piano ? PLAYABLE_KEYS.map(key => <Key key={key} pianoKey={key} piano={piano} />) : null}
     </div>
   ) : (
     <div style={{ width: '50vh', height: '25vh', backgroundColor: 'mediumspringgreen' }} onClick={() => setReady(true)}></div>

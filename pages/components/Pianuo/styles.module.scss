@@ -33,6 +33,7 @@
 
   background-color: black;
   color: ghostwhite;
+  z-index: 2;
 
   height: 60%;
   width: var(--width);
@@ -49,6 +50,7 @@
 
   background-color: ghostwhite;
   color: black;
+  z-index: 1;
 
   height: 100%;
   width: var(--width);
