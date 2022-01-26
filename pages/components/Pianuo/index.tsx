@@ -9,6 +9,7 @@ const A_4_PITCH = 440;
 const A_4_POSITION = 49;
 // https://en.wikipedia.org/wiki/Equal_temperament#Mathematics
 const SEMITONE_WIDTH = 2 ** (1 / 12);
+const SEPARATOR = '|';
 
 const notes = [ 'A', 'B', 'C', 'D', 'E', 'F', 'G' ] as const;
 const octaves = [ '0', '1', '2', '3', '4', '5', '6', '7', '8' ] as const;
@@ -19,6 +20,9 @@ type Accidental = typeof accidentals[number];
 type Octave = typeof octaves[number];
 
 type Key = `${Note}${Accidental}${Octave}`;
+
+type PianoAction = 'press' | 'release';
+type PianoMessage = `${PianoAction}${typeof SEPARATOR}${Key}`
 
 const getNote = (key: Key): Note => key[0] as Note;
 const getAccidental = (key: Key): Accidental => key[1] as Accidental;
@@ -74,11 +78,11 @@ const Key: FC<{ pianoKey: Key, piano: Piano, debug?: boolean }> = ({ pianoKey, p
   return (
     <div
       onMouseDown={() => {
-        piano.press(pianoKey);
+        piano.play(pianoKey);
         setIsDown(true);
       }}
       onMouseUp={() => {
-        piano.release(pianoKey)
+        piano.stop(pianoKey)
         setIsDown(false);
       }}
       className={cx(
@@ -163,12 +167,17 @@ class Piano {
   static GAIN = 0.5;
 
   context: AudioContext;
+  ws: WebSocket;
+
   reverb: ConvolverNode;
   eq: BiquadFilterNode;
   outputGain: GainNode;
   voices: Partial<Record<Key, Voice>> = {};
 
-  constructor(context: AudioContext) {
+  constructor(context: AudioContext, ws: WebSocket) {
+    this.ws = ws;
+    this.ws.onmessage = this.handleMessage.bind(this);
+
     this.context = context;
 
     this.reverb = this.context.createConvolver();
@@ -229,7 +238,7 @@ class Piano {
       voice.interval.frequency.setValueAtTime(baseFrequency * SEMITONE_WIDTH ** 12, now);
       // voice.interval.frequency.setValueAtTime(baseFrequency, now);
       voice.interval.start(now);
-      
+
       // Vibrato
       const vibrato = this.context.createOscillator();
       const vibratoGain = this.context.createGain();
@@ -276,6 +285,26 @@ class Piano {
       delete this.voices[key];
     }
   }
+
+  play(key: Key) {
+    this.ws.send(`press${SEPARATOR}${key}`);
+
+    this.press(key);
+  }
+
+  stop(key: Key) {
+    this.ws.send(`release${SEPARATOR}${key}`);
+
+    this.release(key);
+  }
+
+  handleMessage(message: MessageEvent) {
+    console.log('got message', message);
+    const [ action, key ]: [ PianoAction, Key ] = message.data.split(SEPARATOR);
+
+    if (action === 'press') this.press(key);
+    else this.release(key);
+  }
 }
 
 // ############################################################
@@ -314,13 +343,13 @@ const keyToNote: Record<string, Key> = {
 const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>, piano: Piano | undefined) => {
   const note = keyToNote[e.key];
 
-  if (piano && note && !piano.voices[note]) piano.press(note);
+  if (piano && note && !piano.voices[note]) piano.play(note);
 }
 
 const handleKeyUp = (e: KeyboardEvent<HTMLDivElement>, piano: Piano | undefined) => {
   const note = keyToNote[e.key];
 
-  if (piano && note) piano.release(note);
+  if (piano && note) piano.stop(note);
 }
 
 const PLAYABLE_KEYS: Key[] = [
@@ -343,14 +372,22 @@ export const Pianuo: FC = () => {
   const [ ready, setReady ] = useState(false);
   const [ context, setContext ] = useState<AudioContext>();
   const [ piano, setPiano ] = useState<Piano>();
+  const [ ws, setWs ] = useState<WebSocket>();
 
   // TODO: create analyser node for VU meter-style visualizer
 
   useEffect(() => {
     if (ready) {
+      // shadow ws to pass around in this function body
+      // const ws = new WebSocket('ws://localhost:8080');
+      const ws = new WebSocket('ws://192.168.0.106:8080');
+      setWs(ws);
+
       const context = new AudioContext();
       setContext(context);
-      setPiano(new Piano(context));
+      setPiano(new Piano(context, ws));
+
+      return () => ws.close();
     }
   }, [ready]);
 
@@ -364,6 +401,14 @@ export const Pianuo: FC = () => {
       {piano ? PLAYABLE_KEYS.map(key => <Key key={key} pianoKey={key} piano={piano} />) : null}
     </div>
   ) : (
-    <div style={{ width: '50vh', height: '25vh', backgroundColor: 'mediumspringgreen' }} onClick={() => setReady(true)}></div>
+    <div
+      style={{
+        width: '50vh',
+        height: '25vh',
+        backgroundColor: 'mediumspringgreen'
+      }}
+      onClick={() => setReady(true)}
+      onTouchStart={() => setReady(true)}
+    />
   )
 }

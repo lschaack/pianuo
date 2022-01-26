@@ -1,6 +1,6 @@
 {
   "name": "pianuo",
-  "private": true,
+  "author": "Luke Schaack <luke.schaack@gmail.com>",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
