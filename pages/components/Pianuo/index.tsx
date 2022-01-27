@@ -1,4 +1,5 @@
-import React, { FC, KeyboardEvent, useEffect, useState } from "react";
+import React, { FC, KeyboardEvent, useCallback, useEffect, useState } from "react";
+import uniqueId from 'lodash/uniqueId';
 import cx from 'clsx';
 
 import styles from './styles.module.scss';
@@ -55,17 +56,32 @@ const PLAYABLE_KEYS: Key[] = [
 
 const Key: FC<{ pianoKey: Key, piano: Piano, debug?: boolean }> = ({ pianoKey, piano, debug = false }) => {
   const [ isDown, setIsDown ] = useState(false);
+  const [ id ] = useState(uniqueId());
+
+  const handleMouseDown = useCallback(() => {
+    piano.play(pianoKey)
+    setIsDown(true);
+  }, [ piano, pianoKey ]);
+
+  const handleMouseUp = useCallback(() => {
+    piano.stop(pianoKey)
+    setIsDown(false);
+  }, [ piano, pianoKey ]);
+
+  useEffect(() => {
+    piano.subscribe({
+      onPress: key => key === pianoKey && setIsDown(true),
+      onRelease: key => key === pianoKey && setIsDown(false),
+    }, id);
+
+    return () => piano.unsubscribe(id);
+  }, [ piano, pianoKey, id ]);
 
   return (
     <div
-      onMouseDown={() => {
-        piano.play(pianoKey);
-        setIsDown(true);
-      }}
-      onMouseUp={() => {
-        piano.stop(pianoKey)
-        setIsDown(false);
-      }}
+      id={pianoKey}
+      onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}
       className={cx(
         isBlackKey(pianoKey) ? styles.blackKey : styles.whiteKey,
         isDown && styles.pressed
@@ -79,7 +95,7 @@ const Key: FC<{ pianoKey: Key, piano: Piano, debug?: boolean }> = ({ pianoKey, p
 const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>, piano: Piano | undefined) => {
   const note = KEY_TO_NOTE[e.key];
 
-  if (piano && note && !piano.voices[note]) piano.play(note);
+  if (piano && note) piano.play(note);
 }
 
 const handleKeyUp = (e: KeyboardEvent<HTMLDivElement>, piano: Piano | undefined) => {
@@ -118,7 +134,13 @@ export const Pianuo: FC = () => {
       onKeyUp={e => handleKeyUp(e, piano)}
       tabIndex={0}
     >
-      {piano ? PLAYABLE_KEYS.map(key => <Key key={key} pianoKey={key} piano={piano} />) : null}
+      {piano ? PLAYABLE_KEYS.map(key => (
+        <Key
+          key={key}
+          pianoKey={key}
+          piano={piano}
+        />
+      )) : null}
     </div>
   ) : (
     <div

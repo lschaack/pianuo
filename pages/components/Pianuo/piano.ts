@@ -8,9 +8,15 @@ export type Voice = {
   envelope: Envelope;
 }
 
+export type KeypressCallback = (note: Key) => void;
+export type KeypressObserver = {
+  onPress: KeypressCallback;
+  onRelease: KeypressCallback;
+}
+
 export class Piano {
   static N_VOICES = 5;
-  static GAIN = 0.5;
+  static GAIN = 0.3;
 
   context: AudioContext;
   ws: WebSocket;
@@ -19,6 +25,9 @@ export class Piano {
   eq: BiquadFilterNode;
   outputGain: GainNode;
   voices: Partial<Record<Key, Voice>> = {};
+
+  // TODO: change this to be indexed w/key first to avoid unnecessary calls
+  subscribers: Record<string, KeypressObserver> = {};
 
   constructor(context: AudioContext, ws: WebSocket) {
     this.ws = ws;
@@ -35,7 +44,7 @@ export class Piano {
     this.eq = this.context.createBiquadFilter();
     this.eq.type = 'lowpass';
     this.eq.frequency.setValueAtTime(10000, context.currentTime);
-    
+
     // this will turn on at a random point if the user stars playing before it's loaded
     // but that's a tomorrow problem
     fetch('/IMreverbs/Nice Drum Room.wav')
@@ -45,16 +54,16 @@ export class Piano {
 
     // hooking everything up
     // TODO: outputGain should probably be the last node
-    // this.outputGain.connect(this.eq);
-    // this.eq.connect(this.reverb);
-    // this.reverb.connect(context.destination);
+    this.outputGain.connect(this.eq);
+    this.eq.connect(this.reverb);
+    this.reverb.connect(context.destination);
 
-    this.outputGain.connect(context.destination);
+    // this.outputGain.connect(context.destination);
   }
 
   press(key: Key) {
     if (!this.voices[key]) {
-      console.log('pressing key', key);
+      Object.values(this.subscribers).forEach(subscriber => subscriber.onPress(key));
 
       const now = this.context.currentTime;
 
@@ -120,6 +129,8 @@ export class Piano {
     const voice = this.voices[key];
 
     if (voice) {
+      Object.values(this.subscribers).forEach(subscriber => subscriber.onRelease(key));
+
       const now = this.context.currentTime;
 
       console.log('releasing key', key);
@@ -133,9 +144,11 @@ export class Piano {
   }
 
   play(key: Key) {
-    this.ws.send(`press${SEPARATOR}${key}`);
+    if (!this.voices[key]) {
+      this.ws.send(`press${SEPARATOR}${key}`);
 
-    this.press(key);
+      this.press(key);
+    }
   }
 
   stop(key: Key) {
@@ -150,5 +163,14 @@ export class Piano {
 
     if (action === 'press') this.press(key);
     else this.release(key);
+  }
+
+  subscribe(observer: KeypressObserver, id: string) {
+    // Multiple subscriptions w/same id will overwrite the previous
+    this.subscribers[id] = observer;
+  }
+
+  unsubscribe(id: string) {
+    delete this.subscribers[id];
   }
 }
