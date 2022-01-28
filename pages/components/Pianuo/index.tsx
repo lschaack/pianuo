@@ -39,6 +39,7 @@ const KEY_TO_NOTE: Record<string, Key> = {
 }
 
 const PLAYABLE_KEYS: Key[] = [
+  'B-3',
   'C-4',
   'C#4',
   'D-4',
