@@ -16,7 +16,7 @@ export type KeypressObserver = {
 
 export class Piano {
   static N_VOICES = 5;
-  static GAIN = 0.3;
+  static GAIN = 0.2;
 
   context: AudioContext;
   ws: WebSocket;
@@ -54,11 +54,11 @@ export class Piano {
 
     // hooking everything up
     // TODO: outputGain should probably be the last node
-    this.outputGain.connect(this.eq);
-    this.eq.connect(this.reverb);
-    this.reverb.connect(context.destination);
+    // this.outputGain.connect(this.eq);
+    // this.eq.connect(this.reverb);
+    // this.reverb.connect(context.destination);
 
-    // this.outputGain.connect(context.destination);
+    this.outputGain.connect(context.destination);
   }
 
   press(key: Key) {
@@ -104,14 +104,14 @@ export class Piano {
       vibratoGain.connect(voice.oscillator.frequency);
 
       // Detune
-      voice.oscillator.detune.setValueAtTime(7, now);
+      // voice.interval.detune.setValueAtTime(7, now);
 
       // Adjust relative volume
       const oscillatorGain = this.context.createGain();
       const intervalGain = this.context.createGain();
 
-      oscillatorGain.gain.setValueAtTime(0.5, now);
-      intervalGain.gain.setValueAtTime(0.5, now);
+      oscillatorGain.gain.setValueAtTime(0.7, now);
+      intervalGain.gain.setValueAtTime(0.3, now);
 
       // Hooking everything up
       voice.oscillator.connect(voice.gain);
