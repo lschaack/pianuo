@@ -11,6 +11,9 @@
   box-shadow: 0 -4px 3px -2px var(--velvet), -3px 4px 6px -5px slategray;
   border-radius: 3px;
 
+  // TODO: this should be tied to input styles
+  margin-top: 5rem;
+
   &:focus {
     // TODO: get rid of this
     outline: none;

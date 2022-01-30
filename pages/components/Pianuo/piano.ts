@@ -16,7 +16,7 @@ export type KeypressObserver = {
 
 export class Piano {
   static N_VOICES = 5;
-  static GAIN = 0.2;
+  static GAIN = 0.05;
 
   context: AudioContext;
   ws: WebSocket;
@@ -162,7 +162,7 @@ export class Piano {
     const [ action, key ]: [ PianoAction, Key ] = message.data.split(SEPARATOR);
 
     if (action === 'press') this.press(key);
-    else this.release(key);
+    else if (action === 'release') this.release(key);
   }
 
   subscribe(observer: KeypressObserver, id: string) {

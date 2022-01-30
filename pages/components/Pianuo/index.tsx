@@ -4,7 +4,7 @@ import cx from 'clsx';
 
 import styles from './styles.module.scss';
 
-import { isBlackKey, Key } from "./helpers";
+import { isBlackKey, Key, SEPARATOR } from "./helpers";
 import { Piano } from "./piano";
 
 const KEY_TO_NOTE: Record<string, Key> = {
@@ -105,43 +105,100 @@ const handleKeyUp = (e: KeyboardEvent<HTMLDivElement>, piano: Piano | undefined)
   if (piano && note) piano.stop(note);
 }
 
+// from https://stackoverflow.com/a/10727155
+const generateModelNumber = () => {
+  const length = 4;
+  const chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let result = '';
+
+  for (var i = length; i > 0; --i) result += chars[Math.floor(Math.random() * chars.length)];
+
+  return result;
+}
+
+const isModelNumber = (maybeModel: string) => /[A-z0-9]{4}/.test(maybeModel);
+
+// handshake:
+// - whenever ready, generate id
+// - whenever id is changed, send message to server 'setId|{id}'
+// - whenever server receives this message, send 'idIsSet|{id}'
+// - id is set when server has added this client to list of clients to be notified
+//   when other connected clients
 export const Pianuo: FC = () => {
-  const [ ready, setReady ] = useState(false);
+  const [ hasGesture, setHasGesture ] = useState(false);
+  const [ socketOpen, setSocketOpen ] = useState(false);
   const [ context, setContext ] = useState<AudioContext>();
   const [ piano, setPiano ] = useState<Piano>();
   const [ ws, setWs ] = useState<WebSocket>();
+  const [ model, setModel ] = useState(generateModelNumber());
+  const [ modelIsSet, setModelIsSet ] = useState(false);
 
   // TODO: create analyser node for VU meter-style visualizer
 
   useEffect(() => {
-    if (ready) {
+    if (hasGesture) {
+      // Audio context can only be started after user gesture
+      const context = new AudioContext();
+      setContext(context);
+
       // shadow ws to pass around in this function body
       // const ws = new WebSocket('ws://localhost:8080');
       const ws = new WebSocket('ws://192.168.0.106:8080');
+      ws.addEventListener('open', e => {
+        console.log('connection opened', e);
+        setSocketOpen(true);
+      });
+      ws.addEventListener('close', e => {
+        console.log('connection closed', e);
+      });
       setWs(ws);
 
-      const context = new AudioContext();
-      setContext(context);
+      setModel(generateModelNumber());
       setPiano(new Piano(context, ws));
 
-      return () => ws.close();
+      return () => {
+        // to identify if this ever runs (never really should unless navigating away)
+        console.log('cleaning up ws, context');
+        ws.close();
+        context.suspend();
+      }
     }
-  }, [ready]);
+  }, [hasGesture]);
 
-  return ready ? (
-    <div
-      className={styles.piano}
-      onKeyDown={e => handleKeyDown(e, piano)}
-      onKeyUp={e => handleKeyUp(e, piano)}
-      tabIndex={0}
-    >
-      {piano ? PLAYABLE_KEYS.map(key => (
-        <Key
-          key={key}
-          pianoKey={key}
-          piano={piano}
-        />
-      )) : null}
+  useEffect(() => {
+    console.log('socket open?', socketOpen);
+    if (socketOpen && ws) {
+      console.log('setting id to', model);
+      ws.send(`setId${SEPARATOR}${model}`);
+    }
+
+    return () => {
+      console.log('removing id', model);
+      ws?.send(`removeId${SEPARATOR}${model}`);
+    }
+  }, [ ws, model, socketOpen ]);
+
+  return hasGesture ? (
+    <div>
+      <input
+        onChange={e => {
+          if (isModelNumber(e.target.value)) setModel(e.target.value);
+        }}
+      />
+      <div
+        className={styles.piano}
+        onKeyDown={e => handleKeyDown(e, piano)}
+        onKeyUp={e => handleKeyUp(e, piano)}
+        tabIndex={0}
+      >
+        {piano ? PLAYABLE_KEYS.map(key => (
+          <Key
+            key={key}
+            pianoKey={key}
+            piano={piano}
+          />
+        )) : null}
+      </div>
     </div>
   ) : (
     <div
@@ -150,8 +207,8 @@ export const Pianuo: FC = () => {
         height: '25vh',
         backgroundColor: 'mediumspringgreen'
       }}
-      onClick={() => setReady(true)}
-      onTouchStart={() => setReady(true)}
+      onClick={() => setHasGesture(true)}
+      onTouchStart={() => setHasGesture(true)}
     />
   )
 }
