@@ -1,10 +1,17 @@
-import React, { FC, KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  FC,
+  KeyboardEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState
+} from 'react';
 import uniqueId from 'lodash/uniqueId';
 import cx from 'clsx';
 
 import styles from './styles.module.scss';
 
-import { isBlackKey, Key, SEPARATOR } from "./helpers";
+import { isBlackKey, Key, MESSAGE_SEPARATOR } from "./helpers";
 import { Piano } from "./piano";
 
 const KEY_TO_NOTE: Record<string, Key> = {
@@ -181,12 +188,12 @@ export const Pianuo: FC = () => {
     console.log('socket open?', socketOpen);
     if (socketOpen && ws) {
       console.log('setting id to', model);
-      ws.send(`setId${SEPARATOR}${model}`);
+      ws.send(`setId${MESSAGE_SEPARATOR}${model}`);
     }
 
     return () => {
       console.log('removing id', model);
-      ws?.send(`removeId${SEPARATOR}${model}`);
+      ws?.send(`removeId${MESSAGE_SEPARATOR}${model}`);
     }
   }, [ ws, model, socketOpen ]);
 

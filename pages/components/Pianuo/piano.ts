@@ -1,4 +1,4 @@
-import { Key, SEPARATOR, PianoAction, KEY_TO_FREQUENCY, SEMITONE_WIDTH } from './helpers';
+import { Key, MESSAGE_SEPARATOR, PianoAction, KEY_TO_FREQUENCY, SEMITONE_WIDTH, ARG_SEPARATOR } from './helpers';
 import { Envelope } from "./envelope";
 
 export type Voice = {
@@ -25,6 +25,12 @@ export class Piano {
   eq: BiquadFilterNode;
   outputGain: GainNode;
   voices: Partial<Record<Key, Voice>> = {};
+
+  prevStartTime: number = 0;
+  keyToStartTime: Partial<Record<Key, number>> = {};
+
+  peerPrevStartTime: number = 0;
+  peerKeyToStartTime: Partial<Record<Key, number>> = {};
 
   // TODO: change this to be indexed w/key first to avoid unnecessary calls
   subscribers: Record<string, KeypressObserver> = {};
@@ -61,11 +67,10 @@ export class Piano {
     this.outputGain.connect(context.destination);
   }
 
-  press(key: Key) {
+  press(key: Key, startTime?: number) {
     if (!this.voices[key]) {
       Object.values(this.subscribers).forEach(subscriber => subscriber.onPress(key));
-
-      const now = this.context.currentTime;
+      const time = startTime ?? this.context.currentTime;
 
       const voice = {
         oscillator: this.context.createOscillator(),
@@ -86,20 +91,20 @@ export class Piano {
       voice.oscillator.type = 'sine';
       voice.interval.type = 'sine';
 
-      voice.oscillator.frequency.setValueAtTime(baseFrequency, now);
-      voice.oscillator.start(now);
+      voice.oscillator.frequency.setValueAtTime(baseFrequency, time);
+      voice.oscillator.start(time);
 
       // Play this oscillator an octave above the base wave
-      voice.interval.frequency.setValueAtTime(baseFrequency * SEMITONE_WIDTH ** 12, now);
+      voice.interval.frequency.setValueAtTime(baseFrequency * SEMITONE_WIDTH ** 12, time);
       // voice.interval.frequency.setValueAtTime(baseFrequency, now);
-      voice.interval.start(now);
+      voice.interval.start(time);
 
       // Vibrato
       const vibrato = this.context.createOscillator();
       const vibratoGain = this.context.createGain();
-      vibrato.frequency.setValueAtTime(5, now);
+      vibrato.frequency.setValueAtTime(5, time);
       vibrato.start();
-      vibratoGain.gain.setValueAtTime(6.5, now);
+      vibratoGain.gain.setValueAtTime(6.5, time);
       vibrato.connect(vibratoGain);
       vibratoGain.connect(voice.oscillator.frequency);
 
@@ -110,8 +115,8 @@ export class Piano {
       const oscillatorGain = this.context.createGain();
       const intervalGain = this.context.createGain();
 
-      oscillatorGain.gain.setValueAtTime(0.7, now);
-      intervalGain.gain.setValueAtTime(0.3, now);
+      oscillatorGain.gain.setValueAtTime(0.7, time);
+      intervalGain.gain.setValueAtTime(0.3, time);
 
       // Hooking everything up
       voice.oscillator.connect(voice.gain);
@@ -119,25 +124,25 @@ export class Piano {
       voice.gain.connect(this.outputGain);
 
       voice.envelope.connect(voice.gain.gain);
-      voice.envelope.start(now);
+      voice.envelope.start(time);
 
       this.voices[key] = voice;
     }
   }
 
-  release(key: Key) {
+  release(key: Key, stopTime?: number) {
     const voice = this.voices[key];
 
     if (voice) {
       Object.values(this.subscribers).forEach(subscriber => subscriber.onRelease(key));
 
-      const now = this.context.currentTime;
+      const time = stopTime ?? this.context.currentTime;
 
       console.log('releasing key', key);
 
-      voice.envelope.stop(now);
+      voice.envelope.stop(time);
       // TODO: avoid clip from this being discontinuously set before rest of envelope is finished
-      voice.oscillator.stop(now + voice.envelope.release);
+      voice.oscillator.stop(time + voice.envelope.release);
       // Rely on garbage collection to destroy this when the references are dead?
       delete this.voices[key];
     }
@@ -145,24 +150,67 @@ export class Piano {
 
   play(key: Key) {
     if (!this.voices[key]) {
-      this.ws.send(`press${SEPARATOR}${key}`);
+      // TODO: use URLSearchParams for this
+      this.ws.send(`press${MESSAGE_SEPARATOR}key=${key}${ARG_SEPARATOR}time=${this.context.currentTime}`);
 
       this.press(key);
     }
   }
 
   stop(key: Key) {
-    this.ws.send(`release${SEPARATOR}${key}`);
+      // TODO: use URLSearchParams for this
+    this.ws.send(`release${MESSAGE_SEPARATOR}key=${key}${ARG_SEPARATOR}time=${this.context.currentTime}`);
 
     this.release(key);
   }
 
   handleMessage(message: MessageEvent) {
     console.log('got message', message);
-    const [ action, key ]: [ PianoAction, Key ] = message.data.split(SEPARATOR);
+    const [ action, params ]: [ PianoAction, string ] = message.data.split(MESSAGE_SEPARATOR);
+    const query = new URLSearchParams(params);
+    const key: Key = query.get('key') as Key;
+    const peerTime = Number(query.get('time'));
+    const now = this.context.currentTime;
 
-    if (action === 'press') this.press(key);
-    else if (action === 'release') this.release(key);
+    // if (action === 'press') this.press(key);
+    // else if (action === 'release') this.release(key);
+
+    if (action === 'press') {
+      // For tracking how far apart two consecutively-pressed keys should be played
+      const peerDifferential = peerTime - this.peerPrevStartTime;
+      this.peerPrevStartTime = peerTime;
+      this.peerKeyToStartTime[key] = peerTime;
+
+      const intendedStartTime = this.prevStartTime + peerDifferential;
+      const timePassed = now - this.prevStartTime;
+
+      // If peerDifferential ms haven't passed, wait until they have
+      if (timePassed < peerDifferential) {
+        const timeRemaining = now - intendedStartTime;
+        const startTime = now + timeRemaining;
+
+        this.press(key, startTime);
+        this.keyToStartTime[key] = startTime;
+
+        this.prevStartTime = startTime;
+      } else { // press immediately
+        this.press(key, now);
+        this.keyToStartTime[key] = now;
+
+        this.prevStartTime = now;
+      }
+    } else if (action === 'release') {
+      if (!this.peerKeyToStartTime[key] || !this.keyToStartTime[key]) this.release(key);
+      else {
+        const peerDifferential = peerTime - this.peerKeyToStartTime[key]!;
+
+        this.release(key, this.keyToStartTime[key]! + peerDifferential);
+
+        // Clean up so these don't mess up future press/release events
+        delete this.keyToStartTime[key];
+        delete this.peerKeyToStartTime[key];
+      }
+    }
   }
 
   subscribe(observer: KeypressObserver, id: string) {

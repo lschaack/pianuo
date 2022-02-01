@@ -2,7 +2,8 @@ export const A_4_PITCH = 440;
 export const A_4_POSITION = 49;
 // https://en.wikipedia.org/wiki/Equal_temperament#Mathematics
 export const SEMITONE_WIDTH = 2 ** (1 / 12);
-export const SEPARATOR = '|';
+export const MESSAGE_SEPARATOR = '?';
+export const ARG_SEPARATOR = '&';
 
 export const notes = [ 'A', 'B', 'C', 'D', 'E', 'F', 'G' ] as const;
 export const octaves = [ '0', '1', '2', '3', '4', '5', '6', '7', '8' ] as const;
@@ -15,7 +16,7 @@ export type Octave = typeof octaves[number];
 export type Key = `${Note}${Accidental}${Octave}`;
 
 export type PianoAction = 'press' | 'release';
-export type PianoMessage = `${PianoAction}${typeof SEPARATOR}${Key}`
+export type PianoMessage = `${PianoAction}${typeof MESSAGE_SEPARATOR}${Key}`
 
 export const getNote = (key: Key): Note => key[0] as Note;
 export const getAccidental = (key: Key): Accidental => key[1] as Accidental;
