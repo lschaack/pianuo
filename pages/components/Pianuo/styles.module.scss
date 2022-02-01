@@ -1,6 +1,14 @@
 .piano {
   --velvet: #d67;
 
+  --white-key-up: inset -1px 1px 2px slategray;
+  --white-key-down: inset -2px 2px 5px slategray;
+  --black-key-up: -2px 2px 5px slategray;
+  --black-key-down: -1px 1px 2px slategray;
+
+  --width-black: 30px;
+  --width-white: 60px;
+
   display: flex;
   background-color: rgba(slategray, 0.35);
   height: 50vh;
@@ -18,64 +26,79 @@
     // TODO: get rid of this
     outline: none;
   }
-}
 
-.blackKey,
-.whiteKey {
-  transition: box-shadow 0.1s linear;
-  border-radius: 0 0 3px 3px;
-  font-size: small;
-  display: flex;
-  justify-content: center;
-  align-items: flex-end;
-}
-
-.blackKey {
-  --width: 30px;
-
-  box-shadow: -2px 2px 5px slategray;
-  background-color: black;
-  color: ghostwhite;
-  z-index: 2;
-
-  height: 60%;
-  width: var(--width);
-
-  position: relative;
-  right: calc(var(--width) / 2);
-  margin-right: calc(0px - var(--width));
-
-  padding-bottom: 0.1em;
-
-  &.pressed {
-    box-shadow: -1px 1px 2px slategray;
-  }
-}
-
-.whiteKey {
-  --width: 60px;
-
-  background-color: ghostwhite;
-  color: black;
-  z-index: 1;
-
-  height: 100%;
-  width: var(--width);
-
-  padding-bottom: 1em;
-
-  &:not(:last-child) {
-    box-shadow: inset -1px 1px 2px slategray;
+  // ############################## Keys ##############################
+  .blackKey,
+  .whiteKey {
+    transition: box-shadow 0.1s ease-out;
+    border-radius: 0 0 3px 3px;
+    font-size: small;
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
   }
 
-  &:last-child {
-    // use negative spread radius w/x-/y-offset differentials to hide right edge of shadow
-    box-shadow: inset -1px 3px 2px -2px slategray;
+  .blackKey {
+    box-shadow: var(--black-key-up);
+    background-color: black;
+    color: ghostwhite;
+    z-index: 2;
+
+    height: 60%;
+    width: var(--width-black);
+
+    position: relative;
+    right: calc(var(--width-black) / 2);
+    margin-right: calc(0px - var(--width-black));
+
+    padding-bottom: 0.1em;
+
+    &.pressed {
+      box-shadow: var(--black-key-down);
+
+      // + .pressed {
+      //   box-shadow: -2px 2px 5px slategray !important;
+      // }
+    }
   }
 
-  &.pressed {
-    box-shadow: inset -2px 2px 5px slategray;
-  }
+  .whiteKey {
+    background-color: ghostwhite;
+    color: black;
+    z-index: 1;
 
-  // query whether next to another press key
+    height: 100%;
+    width: var(--width-white);
+
+    padding-bottom: 1em;
+
+    &:not(:last-child) {
+      box-shadow: var(--white-key-up);
+    }
+
+    &:last-child {
+      // use negative spread radius w/x-/y-offset differentials to hide right edge of shadow
+      box-shadow: inset -1px 3px 2px -2px slategray;
+    }
+
+    &.pressed {
+      box-shadow: var(--white-key-down);
+
+      &.nextPressed {
+        // Combine default and height differential box-shadow,
+        // adjust spread and offset so that they each only show on certain sides
+        // height-differential should show on top, bottom, and left
+        // default should show on right
+        box-shadow: inset -2px 1px 2px -1px slategrey, // default right
+          inset 1px 5px 5px -3px slategray, // height-differential top and left
+          inset 0px -3px 5px -5px slategrey !important; // height-differential bottom
+      }
+
+      + .blackKey.pressed {
+        box-shadow: var(--black-key-up) !important;
+      }
+    }
+
+    // query whether next to another press key
+  }
 }

@@ -1,4 +1,4 @@
-import React, { FC, KeyboardEvent, useCallback, useEffect, useState } from "react";
+import React, { FC, KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
 import uniqueId from 'lodash/uniqueId';
 import cx from 'clsx';
 
@@ -57,7 +57,12 @@ const PLAYABLE_KEYS: Key[] = [
 
 const Key: FC<{ pianoKey: Key, piano: Piano, debug?: boolean }> = ({ pianoKey, piano, debug = false }) => {
   const [ isDown, setIsDown ] = useState(false);
+  const [ nextIsDown, setNextIsDown ] = useState(false);
   const [ id ] = useState(uniqueId());
+
+  const nextKey = useMemo(() => (
+    PLAYABLE_KEYS[PLAYABLE_KEYS.indexOf(pianoKey) + 1]
+  ), [pianoKey]);
 
   const handleMouseDown = useCallback(() => {
     piano.play(pianoKey)
@@ -71,12 +76,18 @@ const Key: FC<{ pianoKey: Key, piano: Piano, debug?: boolean }> = ({ pianoKey, p
 
   useEffect(() => {
     piano.subscribe({
-      onPress: key => key === pianoKey && setIsDown(true),
-      onRelease: key => key === pianoKey && setIsDown(false),
+      onPress: key => {
+        if (key === pianoKey) setIsDown(true);
+        else if (key === nextKey) setNextIsDown(true);
+      },
+      onRelease: key => {
+        if (key === pianoKey) setIsDown(false);
+        else if (key === nextKey) setNextIsDown(false);
+      },
     }, id);
 
     return () => piano.unsubscribe(id);
-  }, [ piano, pianoKey, id ]);
+  }, [ piano, pianoKey, nextKey, id ]);
 
   return (
     <div
@@ -85,7 +96,8 @@ const Key: FC<{ pianoKey: Key, piano: Piano, debug?: boolean }> = ({ pianoKey, p
       onMouseUp={handleMouseUp}
       className={cx(
         isBlackKey(pianoKey) ? styles.blackKey : styles.whiteKey,
-        isDown && styles.pressed
+        isDown && styles.pressed,
+        nextIsDown && styles.nextPressed,
       )}
     >
       {debug ? pianoKey : null}
