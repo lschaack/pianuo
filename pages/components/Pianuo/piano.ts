@@ -178,22 +178,31 @@ export class Piano {
     if (action === 'press') {
       // For tracking how far apart two consecutively-pressed keys should be played
       const peerDifferential = peerTime - this.peerPrevStartTime;
+      console.log('got peer press differential', peerDifferential);
+      // update state
       this.peerPrevStartTime = peerTime;
       this.peerKeyToStartTime[key] = peerTime;
 
       const intendedStartTime = this.prevStartTime + peerDifferential;
-      const timePassed = now - this.prevStartTime;
 
       // If peerDifferential ms haven't passed, wait until they have
-      if (timePassed < peerDifferential) {
-        const timeRemaining = now - intendedStartTime;
-        const startTime = now + timeRemaining;
+      if (now < intendedStartTime) {
+        const timeRemaining = intendedStartTime - now;
 
-        this.press(key, startTime);
-        this.keyToStartTime[key] = startTime;
+        // console.log('waiting', timeRemaining, 'to press');
+        // this.press(key, intendedStartTime);
+        // this.keyToStartTime[key] = intendedStartTime;
 
-        this.prevStartTime = startTime;
+        // this.prevStartTime = intendedStartTime;
+
+        const experimentalStartTime = now + timeRemaining % 1;
+        console.log('waiting', timeRemaining % 1, 'to press');
+        this.press(key, experimentalStartTime);
+        this.keyToStartTime[key] = experimentalStartTime;
+
+        this.prevStartTime = experimentalStartTime;
       } else { // press immediately
+        console.log('pressing immediately');
         this.press(key, now);
         this.keyToStartTime[key] = now;
 
@@ -203,6 +212,7 @@ export class Piano {
       if (!this.peerKeyToStartTime[key] || !this.keyToStartTime[key]) this.release(key);
       else {
         const peerDifferential = peerTime - this.peerKeyToStartTime[key]!;
+        console.log('got peer release differential', peerDifferential);
 
         this.release(key, this.keyToStartTime[key]! + peerDifferential);
 
