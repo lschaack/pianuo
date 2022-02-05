@@ -1,11 +1,16 @@
-import type { NextPage } from 'next'
-import Head from 'next/head'
-import Image from 'next/image'
-import styles from '../styles/Home.module.css'
+import { useState } from 'react';
+import type { NextPage } from 'next';
+import cx from 'clsx';
+import Head from 'next/head';
+import Image from 'next/image';
+import styles from '../styles/Home.module.css';
 
-import { Pianuo } from './components/Pianuo'
+import { generateSessionId, isSessionId } from './components/Pianuo/utils';
+import { Pianuo } from './components/Pianuo';
 
 const Home: NextPage = () => {
+  const [ id, setId ] = useState(generateSessionId());
+
   return (
     <div className={styles.container}>
       <Head>
@@ -19,8 +24,14 @@ const Home: NextPage = () => {
           head
         </h1> */}
 
-        <div className={styles.grid}>
-          <Pianuo />
+        <div className='.flex-col'>
+          <input
+            className='mb-10'
+            onChange={e => {
+              if (isSessionId(e.target.value)) setId(e.target.value);
+            }}
+          />
+          <Pianuo id={id} />
         </div>
       </main>
 

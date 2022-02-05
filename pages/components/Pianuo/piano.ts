@@ -17,6 +17,7 @@ export type KeypressObserver = {
 export class Piano {
   static N_VOICES = 5;
   static GAIN = 0.05;
+  static FULL_BANK = 0.5; // 100 ms
 
   context: AudioContext;
   ws: WebSocket;
@@ -31,6 +32,8 @@ export class Piano {
 
   peerPrevStartTime: number = 0;
   peerKeyToStartTime: Partial<Record<Key, number>> = {};
+
+  bank: number = Piano.FULL_BANK;
 
   // TODO: change this to be indexed w/key first to avoid unnecessary calls
   subscribers: Record<string, KeypressObserver> = {};
@@ -165,7 +168,7 @@ export class Piano {
   }
 
   handleMessage(message: MessageEvent) {
-    console.log('got message', message);
+    // console.log('got message', message);
     const [ action, params ]: [ PianoAction, string ] = message.data.split(MESSAGE_SEPARATOR);
     const query = new URLSearchParams(params);
     const key: Key = query.get('key') as Key;
@@ -176,43 +179,61 @@ export class Piano {
     // else if (action === 'release') this.release(key);
 
     if (action === 'press') {
-      // For tracking how far apart two consecutively-pressed keys should be played
-      const peerDifferential = peerTime - this.peerPrevStartTime;
-      console.log('got peer press differential', peerDifferential);
-      // update state
-      this.peerPrevStartTime = peerTime;
-      this.peerKeyToStartTime[key] = peerTime;
+      this.press(key, now);
 
-      const intendedStartTime = this.prevStartTime + peerDifferential;
+      // // For tracking how far apart two consecutively-pressed keys should be played
+      // const peerDifferential = peerTime - this.peerPrevStartTime;
+      // // ~ the issue is here
+      // // prevStartTime is scheduled for the future
+      // // so if FULL_BANK is 4 seconds and two notes play less than 4 seconds apart,
+      // // self differential will cover almost the entire bank
+      // const selfDifferential = now - this.prevStartTime;
+      // // the gap between these two is the difference in how much time has passed "here" vs "there"
+      // // if positive, more time has passed here than there
+      // // if negative, less time has passed here than there
+      // const differential = selfDifferential - peerDifferential;
+      // if (selfDifferential > 1) this.bank = Piano.FULL_BANK;
+      
+      // console.log('peer differential', peerDifferential);
+      // console.log('self differential', selfDifferential);
+      // console.log('differential', differential);
 
-      // If peerDifferential ms haven't passed, wait until they have
-      if (now < intendedStartTime) {
-        const timeRemaining = intendedStartTime - now;
+      // // update state
+      // this.peerPrevStartTime = peerTime;
+      // this.peerKeyToStartTime[key] = peerTime;
 
-        // console.log('waiting', timeRemaining, 'to press');
-        // this.press(key, intendedStartTime);
-        // this.keyToStartTime[key] = intendedStartTime;
+      // // If the note should have already been played, borrow it from the bank
+      // // TODO: condense these b/c/o common ending
+      // if (differential < 0) {
+      //   const newBalance = Math.max(this.bank + differential, 0);
+      //   console.log('playing in', newBalance, 'seconds, borrowing', differential);
+      //   const borrowedStartTime = now + newBalance;
+      //   this.press(key, borrowedStartTime);
 
-        // this.prevStartTime = intendedStartTime;
+      //   this.bank = newBalance;
+      //   this.keyToStartTime[key] = borrowedStartTime;
+      //   // addressing ~
+      //   // set to actual time so calculations hopefully work out
+      //   this.prevStartTime = now;
+      // } else { // Else add any remainder to bank
+      //   // console.log('playing', this.bank + differential, 'seconds from now');
+      //   const bankedStartTime = now + this.bank + differential;
+      //   console.log('playing in', this.bank + differential, 'seconds');
+      //   this.press(key, bankedStartTime);
 
-        const experimentalStartTime = now + timeRemaining % 1;
-        console.log('waiting', timeRemaining % 1, 'to press');
-        this.press(key, experimentalStartTime);
-        this.keyToStartTime[key] = experimentalStartTime;
-
-        this.prevStartTime = experimentalStartTime;
-      } else { // press immediately
-        console.log('pressing immediately');
-        this.press(key, now);
-        this.keyToStartTime[key] = now;
-
-        this.prevStartTime = now;
-      }
+      //   this.bank = this.bank + differential; // Math.min(this.bank + differential, Piano.FULL_BANK);
+      //   this.keyToStartTime[key] = bankedStartTime;
+      //   // addressing ~
+      //   // set to actual time so calculations hopefully work out
+      //   this.prevStartTime = now;
+      // }
+      
+      // console.log('bank', this.bank);
     } else if (action === 'release') {
       if (!this.peerKeyToStartTime[key] || !this.keyToStartTime[key]) this.release(key);
       else {
         const peerDifferential = peerTime - this.peerKeyToStartTime[key]!;
-        console.log('got peer release differential', peerDifferential);
+        // console.log('got peer release differential', peerDifferential);
 
         this.release(key, this.keyToStartTime[key]! + peerDifferential);
 

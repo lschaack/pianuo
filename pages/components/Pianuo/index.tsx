@@ -13,6 +13,7 @@ import styles from './styles.module.scss';
 
 import { isBlackKey, Key, MESSAGE_SEPARATOR } from "./helpers";
 import { Piano } from "./piano";
+import { generateSessionId, isSessionId } from './utils';
 
 const KEY_TO_NOTE: Record<string, Key> = {
   'z': 'B-3',
@@ -124,32 +125,18 @@ const handleKeyUp = (e: KeyboardEvent<HTMLDivElement>, piano: Piano | undefined)
   if (piano && note) piano.stop(note);
 }
 
-// from https://stackoverflow.com/a/10727155
-const generateModelNumber = () => {
-  const length = 4;
-  const chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  let result = '';
-
-  for (var i = length; i > 0; --i) result += chars[Math.floor(Math.random() * chars.length)];
-
-  return result;
-}
-
-const isModelNumber = (maybeModel: string) => /[A-z0-9]{4}/.test(maybeModel);
-
 // handshake:
 // - whenever ready, generate id
 // - whenever id is changed, send message to server 'setId|{id}'
 // - whenever server receives this message, send 'idIsSet|{id}'
 // - id is set when server has added this client to list of clients to be notified
 //   when other connected clients
-export const Pianuo: FC = () => {
+export const Pianuo: FC<{ id: string }> = id => {
   const [ hasGesture, setHasGesture ] = useState(false);
   const [ socketOpen, setSocketOpen ] = useState(false);
   const [ context, setContext ] = useState<AudioContext>();
   const [ piano, setPiano ] = useState<Piano>();
   const [ ws, setWs ] = useState<WebSocket>();
-  const [ model, setModel ] = useState(generateModelNumber());
   const [ modelIsSet, setModelIsSet ] = useState(false);
 
   // TODO: create analyser node for VU meter-style visualizer
@@ -172,7 +159,6 @@ export const Pianuo: FC = () => {
       });
       setWs(ws);
 
-      setModel(generateModelNumber());
       setPiano(new Piano(context, ws));
 
       return () => {
@@ -187,23 +173,18 @@ export const Pianuo: FC = () => {
   useEffect(() => {
     console.log('socket open?', socketOpen);
     if (socketOpen && ws) {
-      console.log('setting id to', model);
-      ws.send(`setId${MESSAGE_SEPARATOR}${model}`);
+      console.log('setting id to', id);
+      ws.send(`setId${MESSAGE_SEPARATOR}${id}`);
     }
 
     return () => {
-      console.log('removing id', model);
-      ws?.send(`removeId${MESSAGE_SEPARATOR}${model}`);
+      console.log('removing id', id);
+      ws?.send(`removeId${MESSAGE_SEPARATOR}${id}`);
     }
-  }, [ ws, model, socketOpen ]);
+  }, [ ws, id, socketOpen ]);
 
   return hasGesture ? (
     <div>
-      <input
-        onChange={e => {
-          if (isModelNumber(e.target.value)) setModel(e.target.value);
-        }}
-      />
       <div
         className={styles.piano}
         onKeyDown={e => handleKeyDown(e, piano)}
