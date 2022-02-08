@@ -7,6 +7,7 @@ import styles from '../styles/Home.module.css';
 
 import { generateSessionId, isSessionId } from './components/Pianuo/utils';
 import { Pianuo } from './components/Pianuo';
+import { Knob } from './components/Knob';
 
 const Home: NextPage = () => {
   const [ id, setId ] = useState(generateSessionId());
@@ -31,6 +32,7 @@ const Home: NextPage = () => {
               if (isSessionId(e.target.value)) setId(e.target.value);
             }}
           />
+          <Knob />
           <Pianuo id={id} />
         </div>
       </main>

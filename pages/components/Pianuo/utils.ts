@@ -26,3 +26,6 @@ export const generateSessionId = () => {
 }
 
 export const isSessionId = (maybeModel: string) => /[A-z0-9]{4}/.test(maybeModel);
+
+export const clamp = (min: number, val: number, max: number) => Math.max(min, Math.min(max, val));
+export const clampUnit = (val: number) => clamp(0, val, 1);

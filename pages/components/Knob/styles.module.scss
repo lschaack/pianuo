@@ -1,0 +1,31 @@
+.knobWrapper {
+  --size: 75px;
+
+  position: absolute;
+  height: var(--size);
+  width: var(--size);
+  padding: 12px;
+  border-radius: 50%;
+  
+  .knob {
+    background-color: #ddd;
+    height: 100%;
+    width: 100%;
+    border-radius: 50%;
+    // Inset shadow to create the illusion of a curve looking head-on,
+    // default shadow to create an actual shadow matching the keys
+    box-shadow: inset 1px -1px 3px #aaa, -3px 3px 3px -2px #aaa;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  
+  .divot {
+    height: 10px;
+    width: 10px;
+    position: relative;
+    background-color: #eee;
+    border-radius: 50%;
+    box-shadow: inset -1px 1px 4px #aaa;
+  }
+}
