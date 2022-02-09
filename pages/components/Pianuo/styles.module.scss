@@ -1,8 +1,8 @@
 .piano {
   --velvet: #d67;
 
-  --white-key-up: inset -1px 1px 2px slategray;
-  --white-key-down: inset -2px 2px 5px slategray;
+  --white-key-next-up: inset -1px 1px 2px slategray;
+  --white-key-next-down: inset -2px 2px 5px slategray;
   --black-key-up: -2px 2px 5px slategray;
   --black-key-down: -1px 1px 2px slategray;
 
@@ -10,7 +10,8 @@
   --width-white: 60px;
 
   display: flex;
-  background-color: rgba(slategray, 0.35);
+  // background-color: rgba(slategray, 0.35);
+  background-color: #fff;
   height: 50vh;
   max-height: 300px;
   user-select: none;
@@ -62,7 +63,32 @@
     }
   }
 
+  .whiteKey.pressed + .blackKey:not(.pressed) {
+    // bottom shadow, left shadow
+    box-shadow: 0 4px 5px -2px slategray,
+      -3px -3px 8px -1px slategray;
+  }
+
+  .whiteKey.pressed + .blackKey.pressed {
+    box-shadow: -2px 0 5px slategray;
+  }
+
+  .whiteKey.pressed + .whiteKey {
+    box-shadow: 0 0 5px slategrey;
+  }
+
+  .whiteKey.pressed + .blackKey + .whiteKey {
+    box-shadow: 0 0 5px slategrey;
+  }
+
+  .whiteKey.pressed + .whiteKey.pressed,
+  .whiteKey.pressed + .blackKey + .whiteKey.pressed {
+    box-shadow: -1px 1px 1px -1px slategrey;
+  }
+
   .whiteKey {
+    box-shadow: -2px 1px 1px -1px slategrey;
+
     background-color: ghostwhite;
     color: black;
     z-index: 1;
@@ -72,33 +98,14 @@
 
     padding-bottom: 1em;
 
-    &:not(:last-child) {
-      box-shadow: var(--white-key-up);
-    }
-
-    &:last-child {
-      // use negative spread radius w/x-/y-offset differentials to hide right edge of shadow
-      box-shadow: inset -1px 3px 2px -2px slategray;
-    }
-
     &.pressed {
-      box-shadow: var(--white-key-down);
-
-      &.nextPressed {
-        // Combine default and height differential box-shadow,
-        // adjust spread and offset so that they each only show on certain sides
-        // height-differential should show on top, bottom, and left
-        // default should show on right
-        box-shadow: inset -2px 1px 2px -1px slategrey, // default right
-          inset 1px 5px 5px -3px slategray, // height-differential top and left
-          inset 0px -3px 5px -5px slategrey !important; // height-differential bottom
-      }
-
-      + .blackKey.pressed {
-        box-shadow: var(--black-key-up) !important;
-      }
+      background: linear-gradient(
+        0deg,
+        scale-color(ghostwhite, $lightness: -1%),
+        50%,
+        scale-color(ghostwhite, $lightness: -0.2%)
+      );
+      box-shadow: inset 1px 2px 5px -2px slategray;
     }
-
-    // query whether next to another press key
   }
 }
