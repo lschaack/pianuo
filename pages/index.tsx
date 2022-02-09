@@ -25,7 +25,7 @@ const Home: NextPage = () => {
           head
         </h1> */}
 
-        <div className='.flex-col'>
+        <div className={'flex-col'}>
           <input
             className='mb-10'
             onChange={e => {

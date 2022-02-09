@@ -1,6 +1,7 @@
 import React, {
   FC,
   KeyboardEvent,
+  MouseEvent as SyntheticMouseEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -63,7 +64,12 @@ const PLAYABLE_KEYS: Key[] = [
   'C-5',
 ];
 
-const Key: FC<{ pianoKey: Key, piano: Piano, debug?: boolean }> = ({ pianoKey, piano, debug = false }) => {
+const PianoKey: FC<{
+  pianoKey: Key,
+  piano: Piano | undefined,
+  hasGesture: boolean,
+  debug?: boolean
+}> = ({ pianoKey, piano, hasGesture, debug = false }) => {
   const [ isDown, setIsDown ] = useState(false);
   const [ nextIsDown, setNextIsDown ] = useState(false);
   const [ id ] = useState(uniqueId());
@@ -73,17 +79,21 @@ const Key: FC<{ pianoKey: Key, piano: Piano, debug?: boolean }> = ({ pianoKey, p
   ), [pianoKey]);
 
   const handleMouseDown = useCallback(() => {
-    piano.play(pianoKey)
-    setIsDown(true);
-  }, [ piano, pianoKey ]);
+    if (hasGesture) {
+      piano?.play(pianoKey)
+      setIsDown(true);
+    }
+  }, [ piano, pianoKey, hasGesture ]);
 
   const handleMouseUp = useCallback(() => {
-    piano.stop(pianoKey)
-    setIsDown(false);
-  }, [ piano, pianoKey ]);
+    if (hasGesture) {
+      piano?.stop(pianoKey)
+      setIsDown(false);
+    }
+  }, [ piano, pianoKey, hasGesture ]);
 
   useEffect(() => {
-    piano.subscribe({
+    piano?.subscribe({
       onPress: key => {
         if (key === pianoKey) setIsDown(true);
         else if (key === nextKey) setNextIsDown(true);
@@ -94,7 +104,7 @@ const Key: FC<{ pianoKey: Key, piano: Piano, debug?: boolean }> = ({ pianoKey, p
       },
     }, id);
 
-    return () => piano.unsubscribe(id);
+    return () => piano?.unsubscribe(id);
   }, [ piano, pianoKey, nextKey, id ]);
 
   return (
@@ -183,32 +193,37 @@ export const Pianuo: FC<{ id: string }> = id => {
     }
   }, [ ws, id, socketOpen ]);
 
-  return hasGesture ? (
-    <div>
+  const handleGesture = useMemo(() => {
+    if (!hasGesture) {
+      return (event: SyntheticMouseEvent<HTMLDivElement, MouseEvent>) => {
+        event.stopPropagation();
+        setHasGesture(true);
+      }
+    }
+
+    return undefined;
+  }, [hasGesture]);
+
+  return (
+    <div
+      className={hasGesture ? 'animate-unblur' : 'blur-sm'}
+      onClick={handleGesture}
+    >
       <div
         className={styles.piano}
         onKeyDown={e => handleKeyDown(e, piano)}
         onKeyUp={e => handleKeyUp(e, piano)}
         tabIndex={0}
       >
-        {piano ? PLAYABLE_KEYS.map(key => (
-          <Key
+        {PLAYABLE_KEYS.map(key => (
+          <PianoKey
             key={key}
             pianoKey={key}
             piano={piano}
+            hasGesture={hasGesture}
           />
-        )) : null}
+        ))}
       </div>
     </div>
-  ) : (
-    <div
-      style={{
-        width: '50vh',
-        height: '25vh',
-        backgroundColor: 'mediumspringgreen'
-      }}
-      onClick={() => setHasGesture(true)}
-      onTouchStart={() => setHasGesture(true)}
-    />
   )
 }

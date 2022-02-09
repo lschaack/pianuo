@@ -81,6 +81,7 @@
     box-shadow: 0 0 5px slategrey;
   }
 
+  // For white keys next to white keys, regardless of whether there's a black key in between
   .whiteKey.pressed + .whiteKey.pressed,
   .whiteKey.pressed + .blackKey + .whiteKey.pressed {
     box-shadow: -1px 1px 1px -1px slategrey;
