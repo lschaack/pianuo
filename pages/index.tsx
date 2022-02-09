@@ -5,9 +5,9 @@ import Head from 'next/head';
 import Image from 'next/image';
 import styles from '../styles/Home.module.css';
 
-import { generateSessionId, isSessionId } from './components/Pianuo/utils';
-import { Pianuo } from './components/Pianuo';
-import { Knob } from './components/Knob';
+import { generateSessionId, isSessionId } from '../components/Pianuo/utils';
+import { Pianuo } from '../components/Pianuo';
+import { Knob } from '../components/Knob';
 
 const Home: NextPage = () => {
   const [ id, setId ] = useState(generateSessionId());
