@@ -146,6 +146,7 @@ export class Piano {
       voice.envelope.stop(time);
       // TODO: avoid clip from this being discontinuously set before rest of envelope is finished
       voice.oscillator.stop(time + voice.envelope.release);
+      voice.oscillator.onended = () => voice.gain.disconnect();
       // Rely on garbage collection to destroy this when the references are dead?
       delete this.voices[key];
     }
