@@ -82,7 +82,7 @@ export class Piano extends AudioIO {
           attack: 0.03,
           hold: 0.05,
           decay: 0.3,
-          sustain: 0.05,
+          sustain: 0.15,
           release: 0.4
         }),
       }

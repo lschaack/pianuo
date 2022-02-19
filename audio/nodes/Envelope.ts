@@ -40,7 +40,7 @@ export class Envelope {
       this.param.cancelScheduledValues(startTime);
       this.param.setValueAtTime(0.001, startTime);
       this.param.exponentialRampToValueAtTime(1, startTime + this.attack);
-      this.param.exponentialRampToValueAtTime(1, startTime + this.attack + this.hold);
+      this.param.linearRampToValueAtTime(1, startTime + this.attack + this.hold);
       this.param.exponentialRampToValueAtTime(
         this.sustain,
         startTime + this.attack + this.hold + this.decay

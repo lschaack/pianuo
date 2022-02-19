@@ -6,6 +6,8 @@ import { DelayModule } from "components/DelayModule";
 import { TapeDelayNode } from "audio/nodes/TapeDelayNode";
 import { FlangerModule } from "components/FlangerModule";
 import { FlangerNode } from "audio/nodes/FlangerNode";
+import { VibratoModule } from "components/VibratoModule";
+import { VibratoNode } from "audio/nodes/VibratoNode";
 
 // The instrument is the pair of the piano keyboard & optional modules
 
@@ -17,6 +19,7 @@ export const Instrument: FC<{
   const [ piano, setPiano ] = useState<Piano>();
   const [ delay, setDelay ] = useState<TapeDelayNode>();
   const [ flanger, setFlanger ] = useState<FlangerNode>();
+  const [ vibrato, setVibrato ] = useState<VibratoNode>();
 
   useEffect(() => {
     if (context && ws) setPiano(new Piano(context, ws));
@@ -26,7 +29,7 @@ export const Instrument: FC<{
 
   useEffect(() => {
     if (context?.destination && piano) {
-      [ piano, flanger, delay, context.destination ]
+      [ piano, vibrato, flanger, delay, context.destination ]
         .filter(Boolean)
         .reduce((prev, curr) => {
           // TODO: any
@@ -35,7 +38,7 @@ export const Instrument: FC<{
           return curr;
         });
     }
-  }, [ piano, delay, flanger, context ]);
+  }, [ piano, vibrato, delay, flanger, context ]);
 
   // TODO: create analyser node for VU meter-style visualizer
 
@@ -44,6 +47,7 @@ export const Instrument: FC<{
       <div className="flex flex-col">
         {/* <DelayModule context={context} onChange={setDelay} /> */}
         {/* <FlangerModule context={context} onChange={setFlanger} /> */}
+        {/* <VibratoModule context={context} onChange={setVibrato} /> */}
       </div>
       <PianoKeyboard piano={piano} hasGesture={hasGesture} />
     </>

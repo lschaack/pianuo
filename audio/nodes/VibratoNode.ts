@@ -23,7 +23,7 @@ export class VibratoNode extends AudioIO {
     // "for four-point interpolation [delayTime] must be at least one sample"
     const delay = context.createDelay();
 
-    this.oscillator = new CustomOscillatorNode(context, { type: 'sine' });
+    this.oscillator = new CustomOscillatorNode(context, { type: 'sine', autoStart: false });
     this.oscillatorGain = context.createGain();
 
     this.oscillatorGain.gain.value = WINDOW_SIZE;  
