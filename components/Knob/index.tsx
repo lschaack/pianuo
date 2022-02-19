@@ -26,10 +26,11 @@ type KnobState = {
 interface KnobProps {
   // label: string;
   onChange?: (value: number) => void;
+  init?: number;
 }
 
-export const Knob = ({ onChange }: KnobProps) => {
-  const [ value, setValue ] = useState(0.6);
+export const Knob = ({ onChange, init }: KnobProps) => {
+  const [ value, setValue ] = useState(init ?? 0.6);
   useEffect(() => onChange?.(value), [ value, onChange ]);
 
   const { setIsDragging } = useDrag(dx => setValue(prev => clampUnit(prev + dx / PX_PER_VALUE)));

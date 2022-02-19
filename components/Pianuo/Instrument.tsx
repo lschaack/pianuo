@@ -1,9 +1,11 @@
 import { FC, useEffect, useState } from "react";
 
 import { Piano } from "audio/piano";
-import { TapeDelayNode } from "audio/nodes/TapeDelayNode";
-import { DelayModule } from "components/DelayModule";
 import { PianoKeyboard } from "./PianoKeyboard";
+import { DelayModule } from "components/DelayModule";
+import { TapeDelayNode } from "audio/nodes/TapeDelayNode";
+import { FlangerModule } from "components/FlangerModule";
+import { FlangerNode } from "audio/nodes/FlangerNode";
 
 // The instrument is the pair of the piano keyboard & optional modules
 
@@ -14,6 +16,7 @@ export const Instrument: FC<{
 }> = ({ context, ws, hasGesture }) => {
   const [ piano, setPiano ] = useState<Piano>();
   const [ delay, setDelay ] = useState<TapeDelayNode>();
+  const [ flanger, setFlanger ] = useState<FlangerNode>();
 
   useEffect(() => {
     if (context && ws) setPiano(new Piano(context, ws));
@@ -23,26 +26,26 @@ export const Instrument: FC<{
 
   useEffect(() => {
     if (context?.destination && piano) {
-      if (delay) {
-        piano.connect(delay);
-        delay.connect(context.destination);
-      } else {
-        piano.connect(context.destination);
-      }
-    }
+      [ piano, flanger, delay, context.destination ]
+        .filter(Boolean)
+        .reduce((prev, curr) => {
+          // TODO: any
+          prev!.connect(curr as any);
 
-    return () => {
-      piano?.disconnect();
-      delay?.disconnect();
+          return curr;
+        });
     }
-  }, [ piano, delay, context ])
+  }, [ piano, delay, flanger, context ]);
 
   // TODO: create analyser node for VU meter-style visualizer
 
   return (
-    <div>
-      <DelayModule context={context} onChange={setDelay} />
+    <>
+      <div className="flex flex-col">
+        {/* <DelayModule context={context} onChange={setDelay} /> */}
+        {/* <FlangerModule context={context} onChange={setFlanger} /> */}
+      </div>
       <PianoKeyboard piano={piano} hasGesture={hasGesture} />
-    </div>
+    </>
   );
 }

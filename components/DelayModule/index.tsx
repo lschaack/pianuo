@@ -28,12 +28,18 @@ export const DelayModule: FC<DelayModuleProps> = ({ context, onChange: handleCha
   }, [ delayNode, time, depth ]);
 
   return (
-    <div>
+    <div className="flex flex-col">
       <h2>Tape Delay</h2>
-      <label>depth</label>
-      <Knob onChange={setDepth} />
-      <label>time</label>
-      <Knob onChange={setTime} />
+      <ul className="flex">
+        <li>
+          <label>depth</label>
+          <Knob onChange={setDepth} />
+        </li>
+        <li>
+          <label>time</label>
+          <Knob onChange={setTime} />
+        </li>
+      </ul>
     </div>
   );
 }
