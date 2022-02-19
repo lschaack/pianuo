@@ -32,7 +32,6 @@ const Home: NextPage = () => {
               if (isSessionId(e.target.value)) setId(e.target.value);
             }}
           />
-          <Knob />
           <Pianuo id={id} />
         </div>
       </main>

@@ -1,4 +1,5 @@
-import { Key, MESSAGE_SEPARATOR, PianoAction, KEY_TO_FREQUENCY, SEMITONE_WIDTH, ARG_SEPARATOR } from '../components/Pianuo/helpers';
+import { AudioIO } from 'audio/nodes/AudioIO';
+import { Key, MESSAGE_SEPARATOR, PianoAction, KEY_TO_FREQUENCY, SEMITONE_WIDTH, ARG_SEPARATOR } from 'components/Pianuo/helpers';
 import { Envelope } from "audio/nodes/Envelope";
 
 export type Voice = {
@@ -14,7 +15,7 @@ export type KeypressObserver = {
   onRelease: KeypressCallback;
 }
 
-export class Piano {
+export class Piano extends AudioIO {
   static N_VOICES = 5;
   static GAIN = 0.05;
   static FULL_BANK = 0.5; // 100 ms
@@ -24,7 +25,6 @@ export class Piano {
 
   reverb: ConvolverNode;
   eq: BiquadFilterNode;
-  outputGain: GainNode;
   voices: Partial<Record<Key, Voice>> = {};
 
   prevStartTime: number = 0;
@@ -39,6 +39,8 @@ export class Piano {
   subscribers: Record<string, KeypressObserver> = {};
 
   constructor(context: AudioContext, ws: WebSocket) {
+    super(context.createGain(), context.createGain());
+
     this.ws = ws;
     this.ws.onmessage = this.handleMessage.bind(this);
 
@@ -46,8 +48,8 @@ export class Piano {
 
     this.reverb = this.context.createConvolver();
 
-    this.outputGain = this.context.createGain();
-    this.outputGain.gain.setValueAtTime(Piano.GAIN, this.context.currentTime);
+    this.output = this.context.createGain();
+    this.output.gain.setValueAtTime(Piano.GAIN, this.context.currentTime);
 
     // TODO: per-voice eq w/envelope
     this.eq = this.context.createBiquadFilter();
@@ -63,11 +65,8 @@ export class Piano {
 
     // hooking everything up
     // TODO: outputGain should probably be the last node
-    // this.outputGain.connect(this.eq);
+    // this.output.connect(this.eq);
     // this.eq.connect(this.reverb);
-    // this.reverb.connect(context.destination);
-
-    this.outputGain.connect(context.destination);
   }
 
   press(key: Key, startTime?: number) {
@@ -124,7 +123,7 @@ export class Piano {
       // Hooking everything up
       voice.oscillator.connect(voice.gain);
       voice.interval.connect(voice.gain);
-      voice.gain.connect(this.outputGain);
+      voice.gain.connect(this.output);
 
       voice.envelope.connect(voice.gain.gain);
       voice.envelope.start(time);

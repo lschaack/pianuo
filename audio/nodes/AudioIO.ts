@@ -1,8 +1,8 @@
 export class AudioIO<TOptions = {}> {
   input: AudioNode;
-  output: AudioNode;
+  output: GainNode;
 
-  constructor(input: AudioNode, output: AudioNode) {
+  constructor(input: AudioNode, output: GainNode) {
     this.input = input;
     this.output = output;
   }
