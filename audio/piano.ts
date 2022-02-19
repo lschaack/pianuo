@@ -1,5 +1,5 @@
-import { Key, MESSAGE_SEPARATOR, PianoAction, KEY_TO_FREQUENCY, SEMITONE_WIDTH, ARG_SEPARATOR } from './helpers';
-import { Envelope } from "./envelope";
+import { Key, MESSAGE_SEPARATOR, PianoAction, KEY_TO_FREQUENCY, SEMITONE_WIDTH, ARG_SEPARATOR } from '../components/Pianuo/helpers';
+import { Envelope } from "audio/nodes/Envelope";
 
 export type Voice = {
   oscillator: OscillatorNode;

@@ -6,6 +6,7 @@ export type EnvelopeOptions = {
   release: number;
 }
 
+// TODO: potentially get this to follow the AudioIO pattern
 export class Envelope {
   context: AudioContext;
   param: AudioParam | undefined;

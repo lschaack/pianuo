@@ -13,7 +13,7 @@ import cx from 'clsx';
 import styles from './styles.module.scss';
 
 import { isBlackKey, Key, MESSAGE_SEPARATOR } from "./helpers";
-import { Piano } from "./piano";
+import { Piano } from "audio/piano";
 import { generateSessionId, isSessionId } from './utils';
 
 const KEY_TO_NOTE: Record<string, Key> = {

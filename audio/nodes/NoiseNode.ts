@@ -1,3 +1,4 @@
+// TODO: Convert this to follow AudioIO pattern
 export class NoiseNode {
   gain: GainNode;
 
