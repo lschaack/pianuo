@@ -40,8 +40,7 @@ export class Envelope {
       this.param.cancelScheduledValues(startTime);
       this.param.setValueAtTime(0.001, startTime);
       this.param.exponentialRampToValueAtTime(1, startTime + this.attack);
-      this.param.linearRampToValueAtTime(1, startTime + this.attack + this.hold);
-      // TODO: exponential ramp
+      this.param.exponentialRampToValueAtTime(1, startTime + this.attack + this.hold);
       this.param.exponentialRampToValueAtTime(
         this.sustain,
         startTime + this.attack + this.hold + this.decay
@@ -51,7 +50,14 @@ export class Envelope {
 
   stop(stopTime: number) {
     if (this.param) {
-      this.param.setValueAtTime(this.sustain, stopTime);
+      const now = this.context.currentTime;
+      const currValue = this.param.value;
+      // TODO: release should take longer depending on how much higher the current value is from sustain
+      // const releaseCoefficient = currValue / this.sustain; // need some log function on this
+
+      this.param.cancelScheduledValues(now);
+      // for exponentialRampToValueAtTime calculations (based on last-scheduled value)
+      this.param.setValueAtTime(currValue, now);
       this.param.exponentialRampToValueAtTime(0.001, stopTime + this.release);
     }
   }
