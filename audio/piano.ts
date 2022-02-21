@@ -1,4 +1,3 @@
-import { normalizeFromRange } from './utils/audio';
 import { AudioIO } from 'audio/nodes/AudioIO';
 import Comb from 'audio/nodes/comb';
 import { Key, MESSAGE_SEPARATOR, PianoAction, KEY_TO_FREQUENCY, SEMITONE_WIDTH, ARG_SEPARATOR } from 'components/Pianuo/helpers';
@@ -20,24 +19,19 @@ export type KeypressObserver = {
 // Tuning based on https://www.soundonsound.com/techniques/synthesizing-pianos
 export class Piano extends AudioIO {
   static N_VOICES = 5;
-  static GAIN = 0.05;
+  static GAIN = 1 / Piano.N_VOICES;
   static FULL_BANK = 0.5; // 100 ms
   static NEAR_UNIT = 1.005;
   static FULL_DECAY = 9; // 9 seconds
-  static OSCILLATOR_TYPE: OscillatorNode['type'] = 'square';
+  static IMPACT_OSCILLATOR_TYPE: OscillatorNode['type'] = 'square';
+  static TRICORD_OSCILLATOR_TYPE: OscillatorNode['type'] = 'triangle';
 
   context: AudioContext;
   ws: WebSocket;
 
   reverb: ConvolverNode;
-  eq: BiquadFilterNode;
   voices: Partial<Record<Key, Voice>> = {};
-
-  prevStartTime: number = 0;
-  keyToStartTime: Partial<Record<Key, number>> = {};
-
-  peerPrevStartTime: number = 0;
-  peerKeyToStartTime: Partial<Record<Key, number>> = {};
+  send: GainNode;
 
   bank: number = Piano.FULL_BANK;
 
@@ -54,25 +48,20 @@ export class Piano extends AudioIO {
 
     this.reverb = this.context.createConvolver();
 
+    this.send = this.context.createGain();
+
     this.output = this.context.createGain();
     this.output.gain.setValueAtTime(Piano.GAIN, this.context.currentTime);
 
-    // TODO: per-voice eq w/envelope
-    this.eq = this.context.createBiquadFilter();
-    this.eq.type = 'lowpass';
-    this.eq.frequency.setValueAtTime(10000, context.currentTime);
-
     // this will turn on at a random point if the user stars playing before it's loaded
     // but that's a tomorrow problem
-    fetch('/IMreverbs/Nice Drum Room.wav')
+    fetch('/IMreverbs/Ruby Room.wav')
       .then(response => response.arrayBuffer())
       .then(buffer => this.context.decodeAudioData(buffer))
       .then(audioBuffer => this.reverb.buffer = audioBuffer);
 
-    // hooking everything up
-    // TODO: outputGain should probably be the last node
-    // this.output.connect(this.eq);
-    // this.eq.connect(this.reverb);
+    this.send.connect(this.reverb);
+    this.reverb.connect(this.output);
   }
 
   getTricord(frequency: number, time: number) {
@@ -94,16 +83,19 @@ export class Piano extends AudioIO {
       }),
     }
 
-    tricord.left.type = Piano.OSCILLATOR_TYPE;
-    tricord.middle.type = Piano.OSCILLATOR_TYPE;
-    tricord.right.type = Piano.OSCILLATOR_TYPE;
+    tricord.left.type = Piano.TRICORD_OSCILLATOR_TYPE;
+    tricord.middle.type = Piano.TRICORD_OSCILLATOR_TYPE;
+    tricord.right.type = Piano.TRICORD_OSCILLATOR_TYPE;
 
     tricord.left.frequency.setValueAtTime(frequency, time);
     tricord.middle.frequency.setValueAtTime(frequency, time);
     tricord.right.frequency.setValueAtTime(frequency, time);
 
+    // Making these slightly out of tune but giving roughly the same "weight" to the positive
+    // and negative detunes seems to make the beat effect more irregular and interesting
     tricord.left.detune.setValueAtTime(6, time);
-    tricord.right.detune.setValueAtTime(-6, time);
+    tricord.middle.detune.setValueAtTime(-2, time);
+    tricord.right.detune.setValueAtTime(-4, time);
 
     // Mix evenly
     tricord.leftGain.gain.setValueAtTime(0.333, time);
@@ -137,7 +129,7 @@ export class Piano extends AudioIO {
       output: this.context.createGain(),
       // TODO: delay
       envelope: new Envelope(this.context, {
-        attack: 0.001,
+        attack: 0.01,
         hold: 0.1,
         decay: 0.4,
         sustain: 0.001,
@@ -145,13 +137,12 @@ export class Piano extends AudioIO {
       }),
     }
 
-    impact.left.type = Piano.OSCILLATOR_TYPE;
-    impact.right.type = Piano.OSCILLATOR_TYPE;
+    impact.left.type = Piano.IMPACT_OSCILLATOR_TYPE;
+    impact.right.type = Piano.IMPACT_OSCILLATOR_TYPE;
 
     impact.left.frequency.setValueAtTime(frequency, time);
     impact.right.frequency.setValueAtTime(frequency, time);
 
-    // TODO: mess with these
     impact.left.detune.setValueAtTime(9, time);
     impact.right.detune.setValueAtTime(12, time);
 
@@ -184,22 +175,16 @@ export class Piano extends AudioIO {
 
       const impact = this.getImpact(frequency, time);
       const tricord = this.getTricord(frequency, time);
-      const filter = new Comb(this.context, { delay: 1 / (2 * frequency) } as any);
+      // TODO: currently not hooked up to anything
+      const combFilter = new Comb(this.context, {
+        delay: 1 / (2 * frequency),
+        cutoff: frequency,
+      } as any);
 
-      // const cheapFilter = this.context.createBiquadFilter();
-      // cheapFilter.type = 'notch';
-      // cheapFilter.Q.setValueAtTime(1, time);
-      // cheapFilter.frequency.setValueAtTime(1200, time);
-
-      // const brightnessFilter = this.context.createBiquadFilter();
-      // brightnessFilter.type = 'lowpass';
-      // brightnessFilter.Q.setValueAtTime(0.1, time);
-      // brightnessFilter.frequency.setValueAtTime(frequency * 8, time);
-
-      const anotherFilter = this.context.createBiquadFilter();
-      anotherFilter.type = 'bandpass';
-      anotherFilter.Q.setValueAtTime(30, time);
-      anotherFilter.frequency.setValueAtTime(frequency, time);
+      const bandpass = this.context.createBiquadFilter();
+      bandpass.type = 'bandpass';
+      bandpass.Q.setValueAtTime(0.3, time);
+      bandpass.frequency.setValueAtTime(frequency, time);
 
       const impactGain = this.context.createGain();
       const tricordGain = this.context.createGain();
@@ -207,35 +192,20 @@ export class Piano extends AudioIO {
       impactGain.gain.setValueAtTime(0.5, time);
       tricordGain.gain.setValueAtTime(0.5, time);
 
-      // Vibrato
-      // const vibrato = this.context.createOscillator();
-      // const vibratoGain = this.context.createGain();
-      // vibrato.frequency.setValueAtTime(5, time);
-      // vibrato.start();
-      // vibratoGain.gain.setValueAtTime(6.5, time);
-      // vibrato.connect(vibratoGain);
-      // vibratoGain.connect(voice.oscillator.frequency);
-
       // Hooking everything up
-      impact.output.connect(anotherFilter);
-      tricord.output.connect(anotherFilter);
+      impact.output.connect(combFilter.input);
+      tricord.output.connect(combFilter.input);
+      combFilter._filter.type = 'highpass';
 
-      // impact.output.connect(filter.input);
-      // tricord.output.connect(filter.input);
-      // filter.output.connect(anotherFilter);
+      combFilter.output.connect(bandpass);
+      bandpass.connect(voiceOutput);
 
-      // filter.output.connect(brightnessFilter);
-      // brightnessFilter.connect(cheapFilter);
-      // cheapFilter.connect(anotherFilter);
-      anotherFilter.connect(voiceOutput);
-      // impact.output.connect(voiceOutput);
-      // tricord.output.connect(voiceOutput);
-      voiceOutput.connect(this.output);
+      voiceOutput.connect(this.send);
 
       this.voices[key] = {
         impact,
         tricord,
-        filter,
+        filter: combFilter,
         output: voiceOutput,
       };
     }
@@ -286,80 +256,13 @@ export class Piano extends AudioIO {
   }
 
   handleMessage(message: MessageEvent) {
-    // console.log('got message', message);
     const [ action, params ]: [ PianoAction, string ] = message.data.split(MESSAGE_SEPARATOR);
     const query = new URLSearchParams(params);
     const key: Key = query.get('key') as Key;
-    const peerTime = Number(query.get('time'));
     const now = this.context.currentTime;
 
-    // if (action === 'press') this.press(key);
-    // else if (action === 'release') this.release(key);
-
-    if (action === 'press') {
-      this.press(key, now);
-
-      // // For tracking how far apart two consecutively-pressed keys should be played
-      // const peerDifferential = peerTime - this.peerPrevStartTime;
-      // // ~ the issue is here
-      // // prevStartTime is scheduled for the future
-      // // so if FULL_BANK is 4 seconds and two notes play less than 4 seconds apart,
-      // // self differential will cover almost the entire bank
-      // const selfDifferential = now - this.prevStartTime;
-      // // the gap between these two is the difference in how much time has passed "here" vs "there"
-      // // if positive, more time has passed here than there
-      // // if negative, less time has passed here than there
-      // const differential = selfDifferential - peerDifferential;
-      // if (selfDifferential > 1) this.bank = Piano.FULL_BANK;
-      
-      // console.log('peer differential', peerDifferential);
-      // console.log('self differential', selfDifferential);
-      // console.log('differential', differential);
-
-      // // update state
-      // this.peerPrevStartTime = peerTime;
-      // this.peerKeyToStartTime[key] = peerTime;
-
-      // // If the note should have already been played, borrow it from the bank
-      // // TODO: condense these b/c/o common ending
-      // if (differential < 0) {
-      //   const newBalance = Math.max(this.bank + differential, 0);
-      //   console.log('playing in', newBalance, 'seconds, borrowing', differential);
-      //   const borrowedStartTime = now + newBalance;
-      //   this.press(key, borrowedStartTime);
-
-      //   this.bank = newBalance;
-      //   this.keyToStartTime[key] = borrowedStartTime;
-      //   // addressing ~
-      //   // set to actual time so calculations hopefully work out
-      //   this.prevStartTime = now;
-      // } else { // Else add any remainder to bank
-      //   // console.log('playing', this.bank + differential, 'seconds from now');
-      //   const bankedStartTime = now + this.bank + differential;
-      //   console.log('playing in', this.bank + differential, 'seconds');
-      //   this.press(key, bankedStartTime);
-
-      //   this.bank = this.bank + differential; // Math.min(this.bank + differential, Piano.FULL_BANK);
-      //   this.keyToStartTime[key] = bankedStartTime;
-      //   // addressing ~
-      //   // set to actual time so calculations hopefully work out
-      //   this.prevStartTime = now;
-      // }
-      
-      // console.log('bank', this.bank);
-    } else if (action === 'release') {
-      if (!this.peerKeyToStartTime[key] || !this.keyToStartTime[key]) this.release(key);
-      else {
-        const peerDifferential = peerTime - this.peerKeyToStartTime[key]!;
-        // console.log('got peer release differential', peerDifferential);
-
-        this.release(key, this.keyToStartTime[key]! + peerDifferential);
-
-        // Clean up so these don't mess up future press/release events
-        delete this.keyToStartTime[key];
-        delete this.peerKeyToStartTime[key];
-      }
-    }
+    if (action === 'press') this.press(key, now);
+    else if (action === 'release') this.release(key, now);
   }
 
   subscribe(observer: KeypressObserver, id: string) {
