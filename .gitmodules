@@ -1,0 +1,3 @@
+[submodule "audio/nodes/comb"]
+	path = audio/nodes/comb
+	url = https://github.com/web-audio-components/comb.git

@@ -1,12 +1,13 @@
 import { normalizeFromRange } from './utils/audio';
 import { AudioIO } from 'audio/nodes/AudioIO';
+import Comb from 'audio/nodes/comb';
 import { Key, MESSAGE_SEPARATOR, PianoAction, KEY_TO_FREQUENCY, SEMITONE_WIDTH, ARG_SEPARATOR } from 'components/Pianuo/helpers';
 import { Envelope } from "audio/nodes/Envelope";
 
 export type Voice = {
   impact: ReturnType<Piano['getImpact']>;
   tricord: ReturnType<Piano['getTricord']>;
-  filter: ReturnType<Piano['getBrightnessFilter']>;
+  filter: Comb;
   output: GainNode;
 }
 
@@ -23,7 +24,7 @@ export class Piano extends AudioIO {
   static FULL_BANK = 0.5; // 100 ms
   static NEAR_UNIT = 1.005;
   static FULL_DECAY = 9; // 9 seconds
-  static OSCILLATOR_TYPE: OscillatorNode['type'] = 'sawtooth';
+  static OSCILLATOR_TYPE: OscillatorNode['type'] = 'square';
 
   context: AudioContext;
   ws: WebSocket;
@@ -173,35 +174,6 @@ export class Piano extends AudioIO {
     return impact;
   }
 
-  getBrightnessFilter(frequency: number, time: number) {
-    const filter = {
-      filter: this.context.createBiquadFilter(),
-      // output: this.context.createGain(),
-      // TODO: delay
-      envelope: new Envelope(this.context, {
-        attack: 0.001,
-        hold: 0,
-        decay: Piano.FULL_DECAY,
-        sustain: 0.001,
-        release: 0.05
-      }),
-    }
-
-    filter.filter.type = 'lowpass';
-
-    // using 5000 (~D#8—a higher note than an 88-key keyboard has) as max frequency
-    const MAX_FREQUENCY = 5000;
-    // TODO: make this a little less basic than lowest notes take full 9 seconds, highest take 0
-    // filter.envelope.decay = 1 / normalizeFromRange(0, MAX_FREQUENCY, frequency) * Piano.FULL_DECAY;
-
-    // TODO: something less basic here too probably
-    // filter.envelope.connect(filter.filter.frequency);
-
-    filter.envelope.start(time);
-
-    return filter;
-  }
-
   press(key: Key, startTime?: number) {
     if (!this.voices[key]) {
       Object.values(this.subscribers).forEach(subscriber => subscriber.onPress(key));
@@ -212,7 +184,22 @@ export class Piano extends AudioIO {
 
       const impact = this.getImpact(frequency, time);
       const tricord = this.getTricord(frequency, time);
-      const filter = this.getBrightnessFilter(frequency, time);
+      const filter = new Comb(this.context, { delay: 1 / (2 * frequency) } as any);
+
+      // const cheapFilter = this.context.createBiquadFilter();
+      // cheapFilter.type = 'notch';
+      // cheapFilter.Q.setValueAtTime(1, time);
+      // cheapFilter.frequency.setValueAtTime(1200, time);
+
+      // const brightnessFilter = this.context.createBiquadFilter();
+      // brightnessFilter.type = 'lowpass';
+      // brightnessFilter.Q.setValueAtTime(0.1, time);
+      // brightnessFilter.frequency.setValueAtTime(frequency * 8, time);
+
+      const anotherFilter = this.context.createBiquadFilter();
+      anotherFilter.type = 'bandpass';
+      anotherFilter.Q.setValueAtTime(30, time);
+      anotherFilter.frequency.setValueAtTime(frequency, time);
 
       const impactGain = this.context.createGain();
       const tricordGain = this.context.createGain();
@@ -230,11 +217,19 @@ export class Piano extends AudioIO {
       // vibratoGain.connect(voice.oscillator.frequency);
 
       // Hooking everything up
-      // impact.output.connect(filter.filter);
-      // tricord.output.connect(filter.filter);
-      // filter.filter.connect(voiceOutput);
-      impact.output.connect(voiceOutput);
-      tricord.output.connect(voiceOutput);
+      impact.output.connect(anotherFilter);
+      tricord.output.connect(anotherFilter);
+
+      // impact.output.connect(filter.input);
+      // tricord.output.connect(filter.input);
+      // filter.output.connect(anotherFilter);
+
+      // filter.output.connect(brightnessFilter);
+      // brightnessFilter.connect(cheapFilter);
+      // cheapFilter.connect(anotherFilter);
+      anotherFilter.connect(voiceOutput);
+      // impact.output.connect(voiceOutput);
+      // tricord.output.connect(voiceOutput);
       voiceOutput.connect(this.output);
 
       this.voices[key] = {
@@ -258,7 +253,6 @@ export class Piano extends AudioIO {
 
       voice.tricord.envelope.stop(time);
       voice.impact.envelope.stop(time);
-      voice.filter.envelope.stop(time);
       // TODO: avoid clip from this being discontinuously set before rest of envelope is finished
       voice.tricord.left.stop(time + voice.tricord.envelope.release);
       voice.tricord.middle.stop(time + voice.tricord.envelope.release);

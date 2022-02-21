@@ -45,7 +45,7 @@ export const Instrument: FC<{
   return (
     <>
       <div className="flex flex-col">
-        {/* <DelayModule context={context} onChange={setDelay} /> */}
+        <DelayModule context={context} onChange={setDelay} />
         {/* <FlangerModule context={context} onChange={setFlanger} /> */}
         {/* <VibratoModule context={context} onChange={setVibrato} /> */}
       </div>
