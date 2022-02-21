@@ -1,12 +1,13 @@
+import { normalizeFromRange } from './utils/audio';
 import { AudioIO } from 'audio/nodes/AudioIO';
 import { Key, MESSAGE_SEPARATOR, PianoAction, KEY_TO_FREQUENCY, SEMITONE_WIDTH, ARG_SEPARATOR } from 'components/Pianuo/helpers';
 import { Envelope } from "audio/nodes/Envelope";
 
 export type Voice = {
-  oscillator: OscillatorNode;
-  interval: OscillatorNode;
-  gain: GainNode;
-  envelope: Envelope;
+  impact: ReturnType<Piano['getImpact']>;
+  tricord: ReturnType<Piano['getTricord']>;
+  filter: ReturnType<Piano['getBrightnessFilter']>;
+  output: GainNode;
 }
 
 export type KeypressCallback = (note: Key) => void;
@@ -15,10 +16,14 @@ export type KeypressObserver = {
   onRelease: KeypressCallback;
 }
 
+// Tuning based on https://www.soundonsound.com/techniques/synthesizing-pianos
 export class Piano extends AudioIO {
   static N_VOICES = 5;
   static GAIN = 0.05;
   static FULL_BANK = 0.5; // 100 ms
+  static NEAR_UNIT = 1.005;
+  static FULL_DECAY = 9; // 9 seconds
+  static OSCILLATOR_TYPE: OscillatorNode['type'] = 'sawtooth';
 
   context: AudioContext;
   ws: WebSocket;
@@ -69,66 +74,175 @@ export class Piano extends AudioIO {
     // this.eq.connect(this.reverb);
   }
 
+  getTricord(frequency: number, time: number) {
+    const tricord = {
+      left: this.context.createOscillator(),
+      middle: this.context.createOscillator(),
+      right: this.context.createOscillator(),
+      leftGain: this.context.createGain(),
+      middleGain: this.context.createGain(),
+      rightGain: this.context.createGain(),
+      output: this.context.createGain(),
+      // TODO: delay
+      envelope: new Envelope(this.context, {
+        attack: 0.05,
+        hold: 0,
+        decay: Piano.FULL_DECAY,
+        sustain: 0.05,
+        release: 0.25
+      }),
+    }
+
+    tricord.left.type = Piano.OSCILLATOR_TYPE;
+    tricord.middle.type = Piano.OSCILLATOR_TYPE;
+    tricord.right.type = Piano.OSCILLATOR_TYPE;
+
+    tricord.left.frequency.setValueAtTime(frequency, time);
+    tricord.middle.frequency.setValueAtTime(frequency, time);
+    tricord.right.frequency.setValueAtTime(frequency, time);
+
+    tricord.left.detune.setValueAtTime(6, time);
+    tricord.right.detune.setValueAtTime(-6, time);
+
+    // Mix evenly
+    tricord.leftGain.gain.setValueAtTime(0.333, time);
+    tricord.middleGain.gain.setValueAtTime(0.333, time);
+    tricord.rightGain.gain.setValueAtTime(0.333, time);
+
+    tricord.left.connect(tricord.leftGain);
+    tricord.middle.connect(tricord.middleGain);
+    tricord.right.connect(tricord.rightGain);
+
+    tricord.leftGain.connect(tricord.output);
+    tricord.middleGain.connect(tricord.output);
+    tricord.rightGain.connect(tricord.output);
+
+    tricord.envelope.connect(tricord.output.gain);
+
+    tricord.left.start(time);
+    tricord.middle.start(time);
+    tricord.right.start(time);
+    tricord.envelope.start(time);
+
+    return tricord;
+  }
+
+  getImpact(frequency: number, time: number) {
+    const impact = {
+      left: this.context.createOscillator(),
+      right: this.context.createOscillator(),
+      leftGain: this.context.createGain(),
+      rightGain: this.context.createGain(),
+      output: this.context.createGain(),
+      // TODO: delay
+      envelope: new Envelope(this.context, {
+        attack: 0.001,
+        hold: 0.1,
+        decay: 0.4,
+        sustain: 0.001,
+        release: 0.05
+      }),
+    }
+
+    impact.left.type = Piano.OSCILLATOR_TYPE;
+    impact.right.type = Piano.OSCILLATOR_TYPE;
+
+    impact.left.frequency.setValueAtTime(frequency, time);
+    impact.right.frequency.setValueAtTime(frequency, time);
+
+    // TODO: mess with these
+    impact.left.detune.setValueAtTime(9, time);
+    impact.right.detune.setValueAtTime(12, time);
+
+    // Mix evenly
+    impact.leftGain.gain.setValueAtTime(0.5, time);
+    impact.rightGain.gain.setValueAtTime(0.5, time);
+
+    impact.left.connect(impact.leftGain);
+    impact.right.connect(impact.rightGain);
+
+    impact.leftGain.connect(impact.output);
+    impact.rightGain.connect(impact.output);
+
+    impact.envelope.connect(impact.output.gain);
+
+    impact.left.start(time);
+    impact.right.start(time);
+    impact.envelope.start(time);
+
+    return impact;
+  }
+
+  getBrightnessFilter(frequency: number, time: number) {
+    const filter = {
+      filter: this.context.createBiquadFilter(),
+      // output: this.context.createGain(),
+      // TODO: delay
+      envelope: new Envelope(this.context, {
+        attack: 0.001,
+        hold: 0,
+        decay: Piano.FULL_DECAY,
+        sustain: 0.001,
+        release: 0.05
+      }),
+    }
+
+    filter.filter.type = 'lowpass';
+
+    // using 5000 (~D#8—a higher note than an 88-key keyboard has) as max frequency
+    const MAX_FREQUENCY = 5000;
+    // TODO: make this a little less basic than lowest notes take full 9 seconds, highest take 0
+    // filter.envelope.decay = 1 / normalizeFromRange(0, MAX_FREQUENCY, frequency) * Piano.FULL_DECAY;
+
+    // TODO: something less basic here too probably
+    // filter.envelope.connect(filter.filter.frequency);
+
+    filter.envelope.start(time);
+
+    return filter;
+  }
+
   press(key: Key, startTime?: number) {
     if (!this.voices[key]) {
       Object.values(this.subscribers).forEach(subscriber => subscriber.onPress(key));
       const time = startTime ?? this.context.currentTime;
+      const frequency = KEY_TO_FREQUENCY[key] * Piano.NEAR_UNIT;
 
-      const voice = {
-        oscillator: this.context.createOscillator(),
-        interval: this.context.createOscillator(),
-        gain: this.context.createGain(),
-        envelope: new Envelope(this.context, {
-          attack: 0.03,
-          hold: 0.05,
-          decay: 0.3,
-          sustain: 0.15,
-          release: 0.4
-        }),
-      }
+      const voiceOutput = this.context.createGain();
 
-      this.voices[key]?.gain.disconnect();
-      const baseFrequency = KEY_TO_FREQUENCY[key];
+      const impact = this.getImpact(frequency, time);
+      const tricord = this.getTricord(frequency, time);
+      const filter = this.getBrightnessFilter(frequency, time);
 
-      voice.oscillator.type = 'sine';
-      voice.interval.type = 'sine';
+      const impactGain = this.context.createGain();
+      const tricordGain = this.context.createGain();
 
-      voice.oscillator.frequency.setValueAtTime(baseFrequency, time);
-      voice.oscillator.start(time);
-
-      // Play this oscillator an octave above the base wave
-      voice.interval.frequency.setValueAtTime(baseFrequency * SEMITONE_WIDTH ** 12, time);
-      // voice.interval.frequency.setValueAtTime(baseFrequency, now);
-      voice.interval.start(time);
+      impactGain.gain.setValueAtTime(0.5, time);
+      tricordGain.gain.setValueAtTime(0.5, time);
 
       // Vibrato
-      const vibrato = this.context.createOscillator();
-      const vibratoGain = this.context.createGain();
-      vibrato.frequency.setValueAtTime(5, time);
-      vibrato.start();
-      vibratoGain.gain.setValueAtTime(6.5, time);
-      vibrato.connect(vibratoGain);
-      vibratoGain.connect(voice.oscillator.frequency);
-
-      // Detune
-      // voice.interval.detune.setValueAtTime(7, now);
-
-      // Adjust relative volume
-      const oscillatorGain = this.context.createGain();
-      const intervalGain = this.context.createGain();
-
-      oscillatorGain.gain.setValueAtTime(0.7, time);
-      intervalGain.gain.setValueAtTime(0.3, time);
+      // const vibrato = this.context.createOscillator();
+      // const vibratoGain = this.context.createGain();
+      // vibrato.frequency.setValueAtTime(5, time);
+      // vibrato.start();
+      // vibratoGain.gain.setValueAtTime(6.5, time);
+      // vibrato.connect(vibratoGain);
+      // vibratoGain.connect(voice.oscillator.frequency);
 
       // Hooking everything up
-      voice.oscillator.connect(voice.gain);
-      voice.interval.connect(voice.gain);
-      voice.gain.connect(this.output);
+      // impact.output.connect(filter.filter);
+      // tricord.output.connect(filter.filter);
+      // filter.filter.connect(voiceOutput);
+      impact.output.connect(voiceOutput);
+      tricord.output.connect(voiceOutput);
+      voiceOutput.connect(this.output);
 
-      voice.envelope.connect(voice.gain.gain);
-      voice.envelope.start(time);
-
-      this.voices[key] = voice;
+      this.voices[key] = {
+        impact,
+        tricord,
+        filter,
+        output: voiceOutput,
+      };
     }
   }
 
@@ -142,10 +256,20 @@ export class Piano extends AudioIO {
 
       console.log('releasing key', key);
 
-      voice.envelope.stop(time);
+      voice.tricord.envelope.stop(time);
+      voice.impact.envelope.stop(time);
+      voice.filter.envelope.stop(time);
       // TODO: avoid clip from this being discontinuously set before rest of envelope is finished
-      voice.oscillator.stop(time + voice.envelope.release);
-      voice.oscillator.onended = () => voice.gain.disconnect();
+      voice.tricord.left.stop(time + voice.tricord.envelope.release);
+      voice.tricord.middle.stop(time + voice.tricord.envelope.release);
+      voice.tricord.right.stop(time + voice.tricord.envelope.release);
+
+      voice.impact.left.stop(time + voice.impact.envelope.release);
+      voice.impact.right.stop(time + voice.impact.envelope.release);
+
+      // Should only need a single event for this since it disconnects every parent node
+      voice.tricord.middle.onended = () => voice.output.disconnect();
+
       // Rely on garbage collection to destroy this when the references are dead?
       delete this.voices[key];
     }
