@@ -107,8 +107,6 @@ export class Synth extends AudioIO {
     this.output = this.context.createGain();
     this.output.gain.setValueAtTime(Synth.GAIN, now);
 
-    this.topGain.connect(this.send);
-    this.subGain.connect(this.send);
     this.send.connect(this.lowpass);
     // TODO: at least a separate highpass, room for other in-built effects here
     this.lowpass.connect(this.return);
@@ -154,7 +152,7 @@ export class Synth extends AudioIO {
       // TODO: make sub octave editable
       const subFrequency = KEY_TO_FREQUENCY[subOctave(key, 1)];
 
-      const output = this.context.createGain();
+      const voiceOutput = this.context.createGain();
 
       const top = this.getTop(frequency, time);
       const sub = this.getSub(subFrequency, time);
@@ -168,18 +166,21 @@ export class Synth extends AudioIO {
       });
       // FIXME: current implementation of envelope requires it to be connected before being started
       // can probably just keep track of whether start has been called and re-call on connect if it has
-      envelope.connect(output.gain);
+      envelope.connect(voiceOutput.gain);
       envelope.start(time);
 
       // Hooking everything up
       top.connect(this.topGain);
       sub.connect(this.subGain);
+      this.topGain.connect(voiceOutput);
+      this.subGain.connect(voiceOutput);
+      voiceOutput.connect(this.output);
 
       this.voices[key] = {
         top,
         sub,
         envelope,
-        output,
+        output: voiceOutput,
       };
     }
   }
@@ -199,8 +200,11 @@ export class Synth extends AudioIO {
       voice.top.stop(time + voice.envelope.release);
       voice.sub.stop(time + voice.envelope.release);
 
-      // Should only need a single event for this since it disconnects every parent node of output
-      voice.top.onended = () => voice.output.disconnect();
+      voice.top.onended = () => {
+        voice.top.disconnect();
+        voice.sub.disconnect();
+        voice.output.disconnect();
+      }
 
       // Rely on garbage collection to destroy this when the references are dead?
       delete this.voices[key];
