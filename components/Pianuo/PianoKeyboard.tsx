@@ -13,14 +13,17 @@ import styles from './styles.module.scss';
 
 import { isBlackKey, Key } from "./helpers";
 import { Piano } from "audio/piano";
+import { Synth } from "audio/synth";
 
-const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>, piano: Piano | undefined) => {
+const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>, piano: Piano | Synth | undefined) => {
   const note = KEY_TO_NOTE[e.key];
+
+  console.log('pressing note', note);
 
   if (piano && note) piano.play(note);
 }
 
-const handleKeyUp = (e: KeyboardEvent<HTMLDivElement>, piano: Piano | undefined) => {
+const handleKeyUp = (e: KeyboardEvent<HTMLDivElement>, piano: Piano | Synth | undefined) => {
   const note = KEY_TO_NOTE[e.key];
 
   if (piano && note) piano.stop(note);
@@ -76,7 +79,7 @@ const PLAYABLE_KEYS: Key[] = [
 
 const PianoKey: FC<{
   pianoKey: Key,
-  piano: Piano | undefined,
+  piano: Piano | Synth | undefined,
   hasGesture: boolean,
   debug?: boolean
 }> = ({ pianoKey, piano, hasGesture, debug = false }) => {
@@ -133,7 +136,7 @@ const PianoKey: FC<{
   );
 }
 
-export const PianoKeyboard: FC<{ piano: Piano | undefined; hasGesture: boolean; }> = ({ piano, hasGesture }) => {
+export const Keybed: FC<{ piano: Piano | Synth | undefined; hasGesture: boolean; }> = ({ piano, hasGesture }) => {
   return (
     <div
       className={styles.piano}

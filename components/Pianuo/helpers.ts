@@ -22,6 +22,12 @@ export const getNote = (key: Key): Note => key[0] as Note;
 export const getAccidental = (key: Key): Accidental => key[1] as Accidental;
 export const getOctave = (key: Key): Octave => key[2] as Octave;
 
+export const subOctave = (key: Key, sub: number) => (
+  // TODO: handle negative octaves?
+  // Depending on how flexible I make it, could be a neat way to repurpose an oscillator as an LFO
+  `${getNote(key)}${getAccidental(key)}${Math.max(parseInt(getOctave(key)) - sub, 0)}` as Key
+);
+
 export const A_DIFF_POSITION: Record<Note, number> = {
   'A': 0,
   'B': 2,
