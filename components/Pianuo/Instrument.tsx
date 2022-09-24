@@ -1,4 +1,4 @@
-import { FC, ReactNode, useEffect, useReducer, useState } from "react";
+import { ChangeEventHandler, FC, ReactNode, useEffect, useReducer, useState } from "react";
 
 import { Piano } from "audio/piano";
 import { Synth } from "audio/synth";
@@ -9,55 +9,9 @@ import { FlangerModule } from "components/FlangerModule";
 import { FlangerNode } from "audio/nodes/FlangerNode";
 import { VibratoModule } from "components/VibratoModule";
 import { VibratoNode } from "audio/nodes/VibratoNode";
+import { dryWetToMix, mixToDryWet } from "audio/utils/audio";
 
 // The instrument is the pair of the piano keyboard & optional modules
-
-// Each mod card has an array of Mod arrays
-// (e.g. for controlling both oscillator type and volume in one card)
-// This maps out all mod cards, so it needs a third wrapping array
-const getObservableMods = (synth: Synth) => {
-
-}
-
-const DEFAULT_MODS: Array<ModCardProps> = [
-  {
-    title: 'OSC1',
-    mods: [
-      [
-        {
-          type: 'radio',
-          label: 'OSC1 type',
-          value: 'sawtooth',
-          options: [ 'sin', 'triangle', 'sawtooth', 'square' ]
-        },
-        {
-          label: 'OSC1 volume',
-          type: 'range',
-          value: 0.5,
-        }
-      ]
-    ]
-  },
-  {
-    title: 'OSC2',
-    mods: [
-      [
-        {
-          type: 'radio',
-          label: 'OSC2 type',
-          value: 'square',
-          options: [ 'sin', 'triangle', 'sawtooth', 'square' ]
-        },
-        {
-          label: 'OSC2 volume',
-          type: 'range',
-          value: 0.5,
-        }
-      ]
-    ]
-  },
-];
-
 export const Instrument: FC<{
   context: AudioContext | undefined,
   ws: WebSocket | undefined,
@@ -68,7 +22,6 @@ export const Instrument: FC<{
   const [ delay, setDelay ] = useState<TapeDelayNode>();
   const [ flanger, setFlanger ] = useState<FlangerNode>();
   const [ vibrato, setVibrato ] = useState<VibratoNode>();
-  const [ mods, setMods ] = useState(DEFAULT_MODS);
 
   useEffect(() => {
     // if (context && ws) setPiano(new Piano(context, ws));
@@ -104,7 +57,7 @@ export const Instrument: FC<{
           <ModCard {...mod} key={`${mod.title}-${index}`} />
         ))} */}
 
-        {synth && <TopOscillatorCard synth={synth} />}
+        {synth && <OscillatorKnobs synth={synth} />}
 
         {/* low pass freq */}
         {/* <input type="range" onChange={undefined} /> */}
@@ -128,132 +81,90 @@ const Card: FC<{ title: ReactNode }> = ({ title, children }) => {
   )
 }
 
-const TopOscillatorCard: FC<{ synth: Synth }> = ({ synth }) => {
+const OscillatorTypePicker: FC<{
+  title: ReactNode,
+  onChange: ChangeEventHandler<HTMLInputElement>,
+  currentType: OscillatorType,
+}> = ({ title, onChange: handleChange, currentType }) => {
+  return (
+    <fieldset>
+      <legend>{title}</legend>
+      {(['sine', 'triangle', 'sawtooth', 'square'] as OscillatorType[]).map((option, index) => {
+        const optionId = `${option}-${index}`;
+
+        return (
+          <div className="flex gap-x-2 items-center" key={optionId}>
+            <input
+              type="radio"
+              id={optionId}
+              checked={currentType === option}
+              value={option}
+              onChange={handleChange}
+            />
+            <label htmlFor={optionId}>
+              {option}
+            </label>
+          </div>
+        )
+      })}
+    </fieldset>
+  )
+}
+
+const OscillatorKnobs: FC<{ synth: Synth }> = ({ synth }) => {
   const [_, forceUpdate] = useReducer(x => x + 1, 0);
 
   const {
     topOscillator: {
-      type: currentType,
-      gain: currentGain,
+      type: currentTopType,
+      gain: currentTopGain,
+    },
+    subOscillator: {
+      type: currentSubType,
+      gain: currentSubGain,
     }
   } = synth?.knobs;
 
-  return (
-    <Card title="OSC1">
-      <fieldset>
-        <legend>Type</legend>
-        {(['sine', 'triangle', 'sawtooth', 'square'] as OscillatorType[]).map((option, index) => {
-          const optionId = `${option}-${index}`;
+  const currentMix = dryWetToMix(currentTopGain, currentSubGain);
 
-          return (
-            <div className="flex-col" key={optionId}>
-              <input
-                type="radio"
-                id={optionId}
-                checked={option === currentType}
-                value={option}
-                onChange={e => {
-                  synth.knobs.topOscillator.type = (e.target.value as OscillatorType)
-                  forceUpdate();
-                }}
-              />
-              <label htmlFor={optionId}>
-                {option}
-              </label>
-            </div>
-          )
-        })}
-      </fieldset>
-      <div className="flex-col">
-        <input
-          type="range"
-          id="topOscillatorVolume"
-          min={0}
-          max={1}
-          step={0.001}
-          value={currentGain}
+  return (
+    <Card title="Oscillators">
+      <div className="flex gap-x-16">
+        <OscillatorTypePicker
+          title="OSC1"
           onChange={e => {
-            synth.knobs.topOscillator.gain = parseFloat(e.target.value)
+            synth.knobs.topOscillator.type = (e.target.value as OscillatorType)
             forceUpdate();
           }}
+          currentType={currentTopType}
         />
-        <label htmlFor="topOscillatorVolume">Volume</label>
+        <div className="flex-col">
+          <label htmlFor="oscillatorMix" className="block">Mix</label>
+          <input
+            type="range"
+            id="oscillatorMix"
+            min={0}
+            max={1}
+            step={0.001}
+            value={currentMix}
+            onChange={e => {
+              const [ topVolume, subVolume ] = mixToDryWet(parseFloat(e.target.value));
+              synth.knobs.topOscillator.gain = topVolume;
+              synth.knobs.subOscillator.gain = subVolume;
+              forceUpdate();
+            }}
+          />
+        </div>
+        {/* TODO: unify this w/above fieldset */}
+        <OscillatorTypePicker
+          title="OSC2"
+          onChange={e => {
+            synth.knobs.subOscillator.type = (e.target.value as OscillatorType)
+            forceUpdate();
+          }}
+          currentType={currentSubType}
+        />
       </div>
     </Card>
   )
-}
-
-type ModType = 'radio' | 'range';
-type BaseMod<Type extends ModType> = {
-  type: Type;
-  label: string;
-}
-type RangeMod = BaseMod<'range'> & {
-  value: number;
-};
-type RadioMod<Options> = BaseMod<'radio'> & {
-  value: string;
-  options: Options;
-};
-type Mod = RangeMod | RadioMod<Array<string>>;
-
-type ModCardProps = {
-  title: string;
-  mods: Mod[][];
-}
-
-const ModCard: FC<ModCardProps> = ({ title, mods }) => {
-  return (
-    <div className="rounded shadow-md">
-      <h2>{title}</h2>
-      {mods.map((modRow, rowIndex) => {
-        return (
-          <div key={`modRow-${rowIndex}`} className="flex">
-            {modRow.map((mod, colIndex) => {
-              const modId = `${rowIndex}-${colIndex}-${mod.label}`;
-
-              return (
-                <div className="flex-col" key={modId}>
-                  {mod.type === 'radio' ? (
-                    // ############################## RADIO ##############################
-                    <fieldset>
-                      <legend>{mod.label}</legend>
-                      {mod.options?.map(option => {
-                        const optionId = `${modId}-${option}`;
-
-                        return (
-                          <div className="flex-col" key={optionId}>
-                            <input
-                              type="radio"
-                              id={optionId}
-                              checked={option === mod.value}
-                              onClick={() => mod.value = option}
-                            />
-                            <label htmlFor={optionId}>
-                              {option}
-                            </label>
-                          </div>
-                        )
-                      })}
-                    </fieldset>
-                  ) : (
-                    // ############################## RANGE ##############################
-                    <div className="flex-col">
-                      <input
-                        type="range"
-                        id={modId}
-                        value={mod.value}
-                        onChange={e => mod.value = parseFloat(e.target.value)}
-                      />
-                      <label htmlFor={modId}>{mod.label}</label>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )
-      })}
-    </div>
-  );
 }

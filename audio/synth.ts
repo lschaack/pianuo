@@ -140,6 +140,8 @@ export class Synth extends AudioIO {
   }
 
   press(key: Key, startTime?: number) {
+    // TODO: this isn't doing much since voices get deleted immediately upon releasing the key,
+    //       how do I want to handle pressing a key before its envelopes are finished?
     if (!this.voices[key]) {
       Object.values(this.subscribers).forEach(subscriber => subscriber.onPress(key));
 
@@ -148,11 +150,11 @@ export class Synth extends AudioIO {
       // TODO: make sub octave editable
       const subFrequency = KEY_TO_FREQUENCY[subOctave(key, 1)];
 
-      const voiceOutput = this.context.createGain();
-      voiceOutput.gain.setValueAtTime(0, this.context.currentTime);
-
       const top = this.getTop(frequency, time);
       const sub = this.getSub(subFrequency, time);
+
+      const voiceOutput = this.context.createGain();
+      voiceOutput.gain.setValueAtTime(0, this.context.currentTime);
 
       const vcaEg = new Envelope(this.context, this.knobs.vcaEg);
       // FIXME: current implementation of vcaEg requires it to be connected before being started

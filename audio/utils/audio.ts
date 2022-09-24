@@ -12,3 +12,6 @@ export const isIO = <TNode extends AudioIO>(node: AudioNode | TNode): node is TN
 );
 
 export const mixToDryWet = (mix: number): [number, number] => [1 - mix, mix];
+
+// TODO: is the abstraction even worth it?
+export const dryWetToMix = (_: number, wet: number) => wet;
