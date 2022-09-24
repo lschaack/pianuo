@@ -2,13 +2,15 @@ import { subOctave } from './../components/Pianuo/helpers';
 import { AudioIO } from 'audio/nodes/AudioIO';
 import Comb from 'audio/nodes/comb';
 import { Key, MESSAGE_SEPARATOR, PianoAction, KEY_TO_FREQUENCY, SEMITONE_WIDTH, ARG_SEPARATOR } from 'components/Pianuo/helpers';
-import { Envelope } from "audio/nodes/Envelope";
+import { Envelope, EnvelopeParams } from "audio/nodes/Envelope";
 
 export type Voice = {
   top: ReturnType<Synth['getTop']>;
   sub: ReturnType<Synth['getSub']>;
   // noise: ReturnType<Synth['getNoise']>;
-  envelope: Envelope;
+  vcaEg: Envelope;
+  vcfEg: Envelope;
+  filter: BiquadFilterNode;
   output: GainNode;
 }
 
@@ -29,13 +31,8 @@ export type Knobs = {
     cutoff: number;
     resonance: number;
   };
-  vca: {
-    attack: number;
-    hold: number;
-    decay: number;
-    sustain: number;
-    release: number;
-  }
+  vcaEg: EnvelopeParams;
+  vcfEg: EnvelopeParams;
 }
 
 /**
@@ -57,16 +54,23 @@ export class Synth extends AudioIO {
       gain: 0.5,
     },
     lpf: {
-      cutoff: 9000,
+      cutoff: 20000,
       resonance: 1,
     },
-    vca: {
-      attack: 0.10,
+    vcaEg: {
+      attack: 0, // 0.10,
       hold: 0,
-      decay: 9,
-      sustain: 0.05,
+      decay: 3, // 0.5,
+      sustain: 0.001,
       release: 0.5,
-    }
+    },
+    vcfEg: {
+      attack: 0.25,
+      hold: 0,
+      decay: 1,
+      sustain: 0.001,
+      release: 0.5,
+    },
   }
 
   // static FULL_DECAY = 9; // 9 seconds
@@ -77,7 +81,7 @@ export class Synth extends AudioIO {
   private topGain: GainNode;
   private subGain: GainNode;
   private send: GainNode;
-  private lowpass: BiquadFilterNode;
+  // private lowpass: BiquadFilterNode;
   private return: GainNode;
 
   // TODO: change this to be indexed w/key first to avoid unnecessary calls
@@ -94,10 +98,10 @@ export class Synth extends AudioIO {
     this.send = this.context.createGain();
     this.return = this.context.createGain();
 
-    this.lowpass = this.context.createBiquadFilter();
-    // TODO: keytracking
-    this.lowpass.frequency.setValueAtTime(this.knobs.lpf.cutoff, now);
-    this.lowpass.Q.setValueAtTime(this.knobs.lpf.resonance, now);
+    // this.lowpass = this.context.createBiquadFilter();
+    // // TODO: keytracking
+    // this.lowpass.frequency.setValueAtTime(this.knobs.lpf.cutoff, now);
+    // this.lowpass.Q.setValueAtTime(this.knobs.lpf.resonance, now);
 
     this.topGain = this.context.createGain();
     this.topGain.gain.setValueAtTime(this.knobs.topOscillator.gain, now);
@@ -107,9 +111,10 @@ export class Synth extends AudioIO {
     this.output = this.context.createGain();
     this.output.gain.setValueAtTime(Synth.GAIN, now);
 
-    this.send.connect(this.lowpass);
+    this.send.connect(this.return);
+    // this.send.connect(this.lowpass);
     // TODO: at least a separate highpass, room for other in-built effects here
-    this.lowpass.connect(this.return);
+    // this.lowpass.connect(this.return);
     this.return.connect(this.output);
   }
 
@@ -136,50 +141,51 @@ export class Synth extends AudioIO {
 
   press(key: Key, startTime?: number) {
     if (!this.voices[key]) {
-      const {
-        vca: {
-          attack,
-          hold,
-          decay,
-          sustain,
-          release,
-        }
-      } = this.knobs;
-
       Object.values(this.subscribers).forEach(subscriber => subscriber.onPress(key));
+
       const time = startTime ?? this.context.currentTime;
       const frequency = KEY_TO_FREQUENCY[key];
       // TODO: make sub octave editable
       const subFrequency = KEY_TO_FREQUENCY[subOctave(key, 1)];
 
       const voiceOutput = this.context.createGain();
+      voiceOutput.gain.setValueAtTime(0, this.context.currentTime);
 
       const top = this.getTop(frequency, time);
       const sub = this.getSub(subFrequency, time);
 
-      const envelope = new Envelope(this.context, {
-        attack,
-        hold,
-        decay,
-        sustain,
-        release,
-      });
-      // FIXME: current implementation of envelope requires it to be connected before being started
+      const vcaEg = new Envelope(this.context, this.knobs.vcaEg);
+      // FIXME: current implementation of vcaEg requires it to be connected before being started
       // can probably just keep track of whether start has been called and re-call on connect if it has
-      envelope.connect(voiceOutput.gain);
-      envelope.start(time);
+      vcaEg.connect(voiceOutput.gain);
+      vcaEg.start(time);
+
+      const filter = this.context.createBiquadFilter();
+      filter.Q.setValueAtTime(this.knobs.lpf.resonance, this.context.currentTime);
+      filter.frequency.setValueAtTime(0, this.context.currentTime);
+
+      const vcfEg = new Envelope(this.context, {
+        ...this.knobs.vcfEg,
+        amount: this.knobs.lpf.cutoff
+      });
+
+      vcfEg.connect(filter.frequency);
+      vcfEg.start(time);
 
       // Hooking everything up
       top.connect(this.topGain);
       sub.connect(this.subGain);
       this.topGain.connect(voiceOutput);
       this.subGain.connect(voiceOutput);
-      voiceOutput.connect(this.output);
+      voiceOutput.connect(filter);
+      filter.connect(this.output);
 
       this.voices[key] = {
         top,
         sub,
-        envelope,
+        vcaEg,
+        vcfEg,
+        filter,
         output: voiceOutput,
       };
     }
@@ -195,10 +201,10 @@ export class Synth extends AudioIO {
 
       console.log('releasing key', key);
 
-      voice.envelope.stop(time);
-      // TODO: avoid clip from this being discontinuously set before rest of envelope is finished
-      voice.top.stop(time + voice.envelope.release);
-      voice.sub.stop(time + voice.envelope.release);
+      voice.vcaEg.stop(time);
+      // TODO: avoid clip from this being discontinuously set before rest of vcaEg is finished
+      voice.top.stop(time + voice.vcaEg.release);
+      voice.sub.stop(time + voice.vcaEg.release);
 
       voice.top.onended = () => {
         voice.top.disconnect();
@@ -252,20 +258,14 @@ export class Synth extends AudioIO {
           return Reflect.set(target, property, value, receiver);
         }
       }),
-      lpf: new Proxy({ ...Synth.INIT_STATE.lpf }, {
-        set(target, property, value, receiver) {
-          console.log('receiver for property', property, 'set to value', value, ':', receiver);
-          if (property === 'cutoff') {
-            synthInstance.lowpass.frequency.setValueAtTime(value, synthInstance.context.currentTime)
-          } else if (property === 'Q') {
-            synthInstance.lowpass.Q.setValueAtTime(value, synthInstance.context.currentTime)
-          }
-
-          return Reflect.set(target, property, value, receiver);
-        }
-      }),
-      vca: {
-        ...Synth.INIT_STATE.vca
+      lpf: {
+        ...Synth.INIT_STATE.lpf
+      },
+      vcaEg: {
+        ...Synth.INIT_STATE.vcaEg
+      },
+      vcfEg: {
+        ...Synth.INIT_STATE.vcfEg
       }
     }
   }

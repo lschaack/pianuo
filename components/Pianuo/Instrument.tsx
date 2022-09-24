@@ -1,4 +1,4 @@
-import { FC, useEffect, useReducer, useState } from "react";
+import { FC, ReactNode, useEffect, useReducer, useState } from "react";
 
 import { Piano } from "audio/piano";
 import { Synth } from "audio/synth";
@@ -119,6 +119,15 @@ export const Instrument: FC<{
   );
 }
 
+const Card: FC<{ title: ReactNode }> = ({ title, children }) => {
+  return (
+    <div className="rounded shadow-md p-4">
+      <h2>{title}</h2>
+      {children}
+    </div>
+  )
+}
+
 const TopOscillatorCard: FC<{ synth: Synth }> = ({ synth }) => {
   const [_, forceUpdate] = useReducer(x => x + 1, 0);
 
@@ -130,56 +139,47 @@ const TopOscillatorCard: FC<{ synth: Synth }> = ({ synth }) => {
   } = synth?.knobs;
 
   return (
-    <div className="rounded shadow-md">
-      <h2>OSC1</h2>
-      <div className="flex">
-        <div className="flex-col">
-          <fieldset>
-            <legend>Type</legend>
-            {(['sine', 'triangle', 'sawtooth', 'square'] as OscillatorType[]).map((option, index) => {
-              const optionId = `${option}-${index}`;
+    <Card title="OSC1">
+      <fieldset>
+        <legend>Type</legend>
+        {(['sine', 'triangle', 'sawtooth', 'square'] as OscillatorType[]).map((option, index) => {
+          const optionId = `${option}-${index}`;
 
-              return (
-                <div className="flex-col" key={optionId}>
-                  <input
-                    type="radio"
-                    id={optionId}
-                    checked={option === currentType}
-                    value={option}
-                    onChange={e => {
-                      synth.knobs.topOscillator.type = (e.target.value as OscillatorType)
-                      forceUpdate();
-                    }}
-                  />
-                  <label htmlFor={optionId}>
-                    {option}
-                  </label>
-                </div>
-              )
-            })}
-          </fieldset>
-        </div>
+          return (
+            <div className="flex-col" key={optionId}>
+              <input
+                type="radio"
+                id={optionId}
+                checked={option === currentType}
+                value={option}
+                onChange={e => {
+                  synth.knobs.topOscillator.type = (e.target.value as OscillatorType)
+                  forceUpdate();
+                }}
+              />
+              <label htmlFor={optionId}>
+                {option}
+              </label>
+            </div>
+          )
+        })}
+      </fieldset>
+      <div className="flex-col">
+        <input
+          type="range"
+          id="topOscillatorVolume"
+          min={0}
+          max={1}
+          step={0.001}
+          value={currentGain}
+          onChange={e => {
+            synth.knobs.topOscillator.gain = parseFloat(e.target.value)
+            forceUpdate();
+          }}
+        />
+        <label htmlFor="topOscillatorVolume">Volume</label>
       </div>
-      <div className="flex">
-        <div className="flex-col">
-          <div className="flex-col">
-            <input
-              type="range"
-              id="topOscillatorVolume"
-              min={0}
-              max={1}
-              step={0.001}
-              value={currentGain}
-              onChange={e => {
-                synth.knobs.topOscillator.gain = parseFloat(e.target.value)
-                forceUpdate();
-              }}
-            />
-            <label htmlFor="topOscillatorVolume">Volume</label>
-          </div>
-        </div>
-      </div>
-    </div>
+    </Card>
   )
 }
 

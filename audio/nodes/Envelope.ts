@@ -1,9 +1,10 @@
-export type EnvelopeOptions = {
+export type EnvelopeParams = {
   attack: number;
   hold: number;
   decay: number;
   sustain: number;
   release: number;
+  amount?: number;
 }
 
 // TODO: potentially get this to follow the AudioIO pattern
@@ -16,12 +17,13 @@ export class Envelope {
   decay: number;
   sustain: number;
   release: number;
+  amount: number;
 
-  constructor(context: AudioContext, options?: Partial<EnvelopeOptions>) {
+  constructor(context: AudioContext, options?: Partial<EnvelopeParams>) {
     this.context = context;
 
-    const { attack, hold, decay, sustain, release } = {
-      attack: 0.03, hold: 0.01, decay: 0.1, sustain: 0.3, release: 0.4, ...options
+    const { attack, hold, decay, sustain, release, amount } = {
+      attack: 0.03, hold: 0.01, decay: 0.1, sustain: 0.3, release: 0.4, amount: 1, ...options
     };
 
     this.attack = attack;
@@ -29,6 +31,7 @@ export class Envelope {
     this.decay = decay;
     this.sustain = sustain;
     this.release = release;
+    this.amount = amount;
   }
 
   connect(param: AudioParam) {
@@ -39,12 +42,14 @@ export class Envelope {
     if (this.param) {
       this.param.cancelScheduledValues(startTime);
       this.param.setValueAtTime(0.001, startTime);
-      this.param.exponentialRampToValueAtTime(1, startTime + this.attack);
-      this.param.linearRampToValueAtTime(1, startTime + this.attack + this.hold);
+      this.param.exponentialRampToValueAtTime(this.amount, startTime + this.attack);
+      this.param.linearRampToValueAtTime(this.amount, startTime + this.attack + this.hold);
       this.param.exponentialRampToValueAtTime(
         this.sustain,
         startTime + this.attack + this.hold + this.decay
       );
+    } else {
+      throw new Error('Envelope started before connecting');
     }
   }
 
@@ -59,6 +64,8 @@ export class Envelope {
       // for exponentialRampToValueAtTime calculations (based on last-scheduled value)
       this.param.setValueAtTime(currValue, now);
       this.param.exponentialRampToValueAtTime(0.001, stopTime + this.release);
+    } else {
+      throw new Error('Envelope stopped before connecting');
     }
   }
 }
