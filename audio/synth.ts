@@ -78,8 +78,6 @@ export class Synth extends AudioIO {
   context: AudioContext;
 
   private voices: Partial<Record<Key, Voice>> = {};
-  private topGain: GainNode;
-  private subGain: GainNode;
   private send: GainNode;
   // private lowpass: BiquadFilterNode;
   private return: GainNode;
@@ -102,11 +100,6 @@ export class Synth extends AudioIO {
     // // TODO: keytracking
     // this.lowpass.frequency.setValueAtTime(this.knobs.lpf.cutoff, now);
     // this.lowpass.Q.setValueAtTime(this.knobs.lpf.resonance, now);
-
-    this.topGain = this.context.createGain();
-    this.topGain.gain.setValueAtTime(this.knobs.topOscillator.gain, now);
-    this.subGain = this.context.createGain();
-    this.subGain.gain.setValueAtTime(this.knobs.subOscillator.gain, now);
 
     this.output = this.context.createGain();
     this.output.gain.setValueAtTime(Synth.GAIN, now);
@@ -153,8 +146,13 @@ export class Synth extends AudioIO {
       const top = this.getTop(frequency, time);
       const sub = this.getSub(subFrequency, time);
 
+      const topGain = this.context.createGain();
+      const subGain = this.context.createGain();
+      topGain.gain.setValueAtTime(this.knobs.topOscillator.gain, time);
+      subGain.gain.setValueAtTime(this.knobs.subOscillator.gain, time);
+
       const voiceOutput = this.context.createGain();
-      voiceOutput.gain.setValueAtTime(0, this.context.currentTime);
+      voiceOutput.gain.setValueAtTime(0, time);
 
       const vcaEg = new Envelope(this.context, this.knobs.vcaEg);
       // FIXME: current implementation of vcaEg requires it to be connected before being started
@@ -163,8 +161,8 @@ export class Synth extends AudioIO {
       vcaEg.start(time);
 
       const filter = this.context.createBiquadFilter();
-      filter.Q.setValueAtTime(this.knobs.lpf.resonance, this.context.currentTime);
-      filter.frequency.setValueAtTime(0, this.context.currentTime);
+      filter.Q.setValueAtTime(this.knobs.lpf.resonance, time);
+      filter.frequency.setValueAtTime(0, time);
 
       const vcfEg = new Envelope(this.context, {
         ...this.knobs.vcfEg,
@@ -175,12 +173,12 @@ export class Synth extends AudioIO {
       vcfEg.start(time);
 
       // Hooking everything up
-      top.connect(this.topGain);
-      sub.connect(this.subGain);
-      this.topGain.connect(voiceOutput);
-      this.subGain.connect(voiceOutput);
+      top.connect(topGain);
+      sub.connect(subGain);
+      topGain.connect(voiceOutput);
+      subGain.connect(voiceOutput);
       voiceOutput.connect(filter);
-      filter.connect(this.output);
+      filter.connect(this.send);
 
       this.voices[key] = {
         top,
@@ -200,8 +198,6 @@ export class Synth extends AudioIO {
       Object.values(this.subscribers).forEach(subscriber => subscriber.onRelease(key));
 
       const time = stopTime ?? this.context.currentTime;
-
-      console.log('releasing key', key);
 
       voice.vcaEg.stop(time);
       // TODO: avoid clip from this being discontinuously set before rest of vcaEg is finished
@@ -237,38 +233,7 @@ export class Synth extends AudioIO {
   }
 
   getInitState() {
-    const synthInstance = this;
-
-    return {
-      topOscillator: new Proxy({ ...Synth.INIT_STATE.topOscillator }, {
-        set(target, property, value, receiver) {
-          console.log('receiver for property', property, 'set to value', value, ':', receiver);
-          if (property === 'gain') {
-            synthInstance.topGain.gain.setValueAtTime(value, synthInstance.context.currentTime);
-          }
-          
-          return Reflect.set(target, property, value, receiver);
-        }
-      }),
-      subOscillator: new Proxy({ ...Synth.INIT_STATE.subOscillator }, {
-        set(target, property, value, receiver) {
-          console.log('receiver for property', property, 'set to value', value, ':', receiver);
-          if (property === 'gain') {
-            synthInstance.subGain.gain.setValueAtTime(value, synthInstance.context.currentTime);
-          }
-          
-          return Reflect.set(target, property, value, receiver);
-        }
-      }),
-      lpf: {
-        ...Synth.INIT_STATE.lpf
-      },
-      vcaEg: {
-        ...Synth.INIT_STATE.vcaEg
-      },
-      vcfEg: {
-        ...Synth.INIT_STATE.vcfEg
-      }
-    }
+    // quick and dirty deep clone
+    return JSON.parse(JSON.stringify(Synth.INIT_STATE));
   }
 }
