@@ -61,6 +61,7 @@ export const Instrument: FC<{
         {synth && (
           <div className="flex">
             <OscillatorKnobs synth={synth} />
+            <FilterKnobs synth={synth} />
             <VCAKnobs synth={synth} />
             <VCFKnobs synth={synth} />
           </div>
@@ -118,6 +119,71 @@ const OscillatorTypePicker: FC<{
   )
 }
 
+const FilterKnobs: FC<{ synth: Synth }> = ({ synth }) => {
+  const [_, forceUpdate] = useReducer(x => x + 1, 0);
+
+  const {
+    lpf: {
+      cutoff,
+      resonance,
+      keytrack,
+    }
+  } = synth?.knobs;
+
+  return (
+    <Card title="LPF">
+      <div className="flex flex-col">
+        <div>
+          <label htmlFor="frequency" className="block">frequency</label>
+          <input
+            type="range"
+            id="frequency"
+            min={0}
+            max={20000}
+            step={0.0001}
+            value={cutoff}
+            onChange={e => {
+              synth.knobs.lpf.cutoff = parseFloat(e.target.value);
+              forceUpdate();
+            }}
+          />
+        </div>
+        <div>
+          <label htmlFor="resonance" className="block">resonance</label>
+          {/* TODO: exponential step increment for fields like these when I make a custom input */}
+          <input
+            type="range"
+            id="resonance"
+            min={0}
+            max={30}
+            step={0.001}
+            value={resonance}
+            onChange={e => {
+              synth.knobs.lpf.resonance = parseFloat(e.target.value);
+              forceUpdate();
+            }}
+          />
+        </div>
+        <div>
+          <label htmlFor="keytrack" className="block">keytrack</label>
+          <input
+            type="range"
+            id="frequency"
+            min={0}
+            max={1}
+            step={0.001}
+            value={keytrack}
+            onChange={e => {
+              synth.knobs.lpf.keytrack = parseFloat(e.target.value);
+              forceUpdate();
+            }}
+          />
+        </div>
+      </div>
+    </Card>
+  )
+}
+
 const OscillatorKnobs: FC<{ synth: Synth }> = ({ synth }) => {
   const [_, forceUpdate] = useReducer(x => x + 1, 0);
 
@@ -136,7 +202,7 @@ const OscillatorKnobs: FC<{ synth: Synth }> = ({ synth }) => {
 
   return (
     <Card title="Oscillators">
-      <div className="flex gap-x-16">
+      <div className="flex gap-x-8">
         <OscillatorTypePicker
           title="OSC1"
           onChange={e => {
@@ -220,7 +286,7 @@ const EGKnobs: FC<{ synth: Synth; title: ReactNode; which: 'vcfEg' | 'vcaEg' }> 
 
 const VCAKnobs: FC<{ synth: Synth }> = ({ synth }) => (
   <EGKnobs
-    title="VCA Envelope"
+    title="VCA"
     which="vcaEg"
     synth={synth}
   />
@@ -228,7 +294,7 @@ const VCAKnobs: FC<{ synth: Synth }> = ({ synth }) => (
 
 const VCFKnobs: FC<{ synth: Synth }> = ({ synth }) => (
   <EGKnobs
-    title="VCF Envelope"
+    title="VCF"
     which="vcfEg"
     synth={synth}
   />
