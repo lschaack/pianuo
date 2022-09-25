@@ -10,6 +10,7 @@ import { FlangerNode } from "audio/nodes/FlangerNode";
 import { VibratoModule } from "components/VibratoModule";
 import { VibratoNode } from "audio/nodes/VibratoNode";
 import { dryWetToMix, mixToDryWet } from "audio/utils/audio";
+import { EnvelopeParams } from "audio/nodes/Envelope";
 
 // The instrument is the pair of the piano keyboard & optional modules
 export const Instrument: FC<{
@@ -57,7 +58,13 @@ export const Instrument: FC<{
           <ModCard {...mod} key={`${mod.title}-${index}`} />
         ))} */}
 
-        {synth && <OscillatorKnobs synth={synth} />}
+        {synth && (
+          <div className="flex">
+            <OscillatorKnobs synth={synth} />
+            <VCAKnobs synth={synth} />
+            <VCFKnobs synth={synth} />
+          </div>
+        )}
 
         {/* low pass freq */}
         {/* <input type="range" onChange={undefined} /> */}
@@ -168,3 +175,61 @@ const OscillatorKnobs: FC<{ synth: Synth }> = ({ synth }) => {
     </Card>
   )
 }
+
+// TODO: Check out vital/subharmonicon/minilogue defaults (probably use minilogue's)
+const envelopeParamToMax: Record<keyof EnvelopeParams, number> = {
+  attack: 1,
+  hold: 3,
+  decay: 9,
+  sustain: 1, // Should only be [0, 1] b/c/o use as coefficient for `amount`
+  release: 9,
+  amount: 20000, // ??? different for vcf/vca (vca on [0, 1])
+};
+
+const EGKnobs: FC<{ synth: Synth; title: ReactNode; which: 'vcfEg' | 'vcaEg' }> = ({ synth, title, which }) => {
+  const [_, forceUpdate] = useReducer(x => x + 1, 0);
+
+  return (
+    <Card title={title}>
+      <div className="flex-col">
+        {Object.entries(synth?.knobs[which]).map(([key, val]) => {
+          const max = envelopeParamToMax[key as keyof EnvelopeParams];
+
+          return (
+            <div key={key}>
+              <label htmlFor={key} className="block">{key}</label>
+              <input
+                type="range"
+                id={key}
+                min={0}
+                max={max}
+                step={max / 1000} // TODO: not enough for vcf amount (although I generally want to exclude amount)
+                value={val}
+                onChange={e => {
+                  synth.knobs[which][key as keyof EnvelopeParams] = parseFloat(e.target.value);
+                  forceUpdate();
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  )
+}
+
+const VCAKnobs: FC<{ synth: Synth }> = ({ synth }) => (
+  <EGKnobs
+    title="VCA Envelope"
+    which="vcaEg"
+    synth={synth}
+  />
+);
+
+const VCFKnobs: FC<{ synth: Synth }> = ({ synth }) => (
+  <EGKnobs
+    title="VCF Envelope"
+    which="vcfEg"
+    synth={synth}
+  />
+);

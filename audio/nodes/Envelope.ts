@@ -45,7 +45,7 @@ export class Envelope {
       this.param.exponentialRampToValueAtTime(this.amount, startTime + this.attack);
       this.param.linearRampToValueAtTime(this.amount, startTime + this.attack + this.hold);
       this.param.exponentialRampToValueAtTime(
-        this.sustain,
+        this.sustain * this.amount,
         startTime + this.attack + this.hold + this.decay
       );
     } else {

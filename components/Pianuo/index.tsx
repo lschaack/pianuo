@@ -80,7 +80,7 @@ export const Pianuo: FC<{ id: string }> = (id, onChange) => {
   return (
     <div
       onClick={handleGesture}
-      className={hasGesture ? 'animate-unblur' : 'blur-sm'}
+      className={`flex flex-col items-center ${hasGesture ? 'animate-unblur' : 'blur-sm'}`}
     >
       <Instrument context={context} ws={ws} hasGesture={hasGesture} />
     </div>
