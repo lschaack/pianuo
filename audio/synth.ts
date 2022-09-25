@@ -1,3 +1,4 @@
+import { mixToDryWet } from './utils/audio';
 import { subOctave } from './../components/Pianuo/helpers';
 import { AudioIO } from 'audio/nodes/AudioIO';
 import Comb from 'audio/nodes/comb';
@@ -30,6 +31,7 @@ export type Knobs = {
   lpf: {
     cutoff: number;
     resonance: number;
+    keytrack: number;
   };
   vcaEg: EnvelopeParams;
   vcfEg: EnvelopeParams;
@@ -56,6 +58,7 @@ export class Synth extends AudioIO {
     lpf: {
       cutoff: 20000,
       resonance: 1,
+      keytrack: 0,
     },
     vcaEg: {
       attack: 0, // 0.10,
@@ -95,11 +98,6 @@ export class Synth extends AudioIO {
 
     this.send = this.context.createGain();
     this.return = this.context.createGain();
-
-    // this.lowpass = this.context.createBiquadFilter();
-    // // TODO: keytracking
-    // this.lowpass.frequency.setValueAtTime(this.knobs.lpf.cutoff, now);
-    // this.lowpass.Q.setValueAtTime(this.knobs.lpf.resonance, now);
 
     this.output = this.context.createGain();
     this.output.gain.setValueAtTime(Synth.GAIN, now);
@@ -164,9 +162,12 @@ export class Synth extends AudioIO {
       filter.Q.setValueAtTime(this.knobs.lpf.resonance, time);
       filter.frequency.setValueAtTime(0, time);
 
+      // FIXME: this is the first thing I came up with, probably how 0% of synths actually handle keytracking
+      const keytrackedFrequency = this.knobs.lpf.cutoff + this.knobs.lpf.keytrack * frequency;
+
       const vcfEg = new Envelope(this.context, {
         ...this.knobs.vcfEg,
-        amount: this.knobs.lpf.cutoff
+        amount: keytrackedFrequency
       });
 
       vcfEg.connect(filter.frequency);
